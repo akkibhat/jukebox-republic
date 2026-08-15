@@ -45,6 +45,7 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
     playbackBlockedReason: null, // set by playbackEngine.js when Spotify can't see any device to play on
     isPlaying: null, // true/false once known from Spotify; null until the first poll or host action reports it
     progressMs: null, // how far into the current track playback is, per the last poll - clients interpolate between polls for a smooth progress bar
+    queueMode: 'fair', // 'fair' (round-robin by contributor) or 'crowd' (most votes first) - the host can switch mid-session, see queue:mode in sockets.js
   };
 
   sessions.set(id, session);

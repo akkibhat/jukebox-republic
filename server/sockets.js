@@ -175,6 +175,19 @@ export function registerSocketHandlers(io) {
       }
     });
 
+    // The "law of the land" switch: how the queue orders itself. Host-only
+    // like the playback overrides - the group votes on songs, but the host
+    // picks which voting system is in effect.
+    socket.on('queue:mode', async ({ mode }, ack) => {
+      const session = requireHost(socket, ack);
+      if (!session) return;
+      if (mode !== 'fair' && mode !== 'crowd') return ack?.({ error: 'Unknown queue mode.' });
+
+      session.queueMode = mode;
+      ack?.({ ok: true });
+      await broadcastState(io, session);
+    });
+
     socket.on('playback:volume', async ({ percent }, ack) => {
       const session = requireHost(socket, ack);
       if (!session) return;

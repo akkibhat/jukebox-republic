@@ -112,7 +112,7 @@ async function pollAndAdvance(session, io) {
  * whether to keep waiting or move on.
  */
 async function tryStartNext(session, io) {
-  const next = pickNextQueueItem(session.queue);
+  const next = pickNextQueueItem(session.queue, session.queueMode);
   const usingFallback = !next;
 
   const accessToken = await ensureFreshToken(session);
@@ -199,8 +199,8 @@ async function tryStartNext(session, io) {
  * fresher is waiting (and it gets dropped outright past
  * MAX_TRANSIENT_FAILURES - see tryStartNext).
  */
-function pickNextQueueItem(queue) {
-  const ordered = sortQueue(queue);
+function pickNextQueueItem(queue, queueMode) {
+  const ordered = sortQueue(queue, queueMode);
   const notYetDemoted = ordered.filter((item) => item.playFailures < RETRY_DEMOTION_THRESHOLD);
   const demoted = ordered.filter((item) => item.playFailures >= RETRY_DEMOTION_THRESHOLD);
   return notYetDemoted[0] || demoted[0] || null;

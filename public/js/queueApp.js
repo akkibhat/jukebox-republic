@@ -115,6 +115,7 @@ function renderState(state) {
       : null;
 
   renderNowPlaying(state.nowPlaying, state.playbackBlockedReason, state.isPlaying, state.progressMs);
+  renderQueueModeBars(state.queueMode);
   renderQueue(state.queue);
   renderReaddableList('autopilot-list', state.fallbackTracks, 'Add to queue', 'Nothing in the Autopilot Mix right now.');
   renderReaddableList('skipped-list', state.skippedSongs, 'Re-add', 'Nothing skipped yet.');
@@ -204,6 +205,30 @@ function fmtTime(ms) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = String(totalSeconds % 60).padStart(2, '0');
   return `${minutes}:${seconds}`;
+}
+
+/**
+ * The "law of the land" banner above the queue, shown on both the Home and
+ * Queue tabs (hence a class, not an id): tells everyone which ordering is
+ * in effect, and gives the host a Switch button to change it. Fair
+ * rotation suits a big group; crowd choice suits a small one where
+ * rallying votes is the fun part.
+ */
+function renderQueueModeBars(mode) {
+  const bars = document.querySelectorAll('.queue-mode-bar');
+  if (!bars.length) return;
+
+  const isFair = mode !== 'crowd';
+  const label = isFair
+    ? '&#9878;&#65039; Fair rotation &mdash; everyone gets a turn'
+    : '&#128293; Majority rule &mdash; most upvoted plays first';
+  const toggle = isHostView
+    ? `<button class="mode-toggle" data-mode="${isFair ? 'crowd' : 'fair'}" type="button">Switch</button>`
+    : '';
+
+  bars.forEach((bar) => {
+    bar.innerHTML = `<span>${label}</span>${toggle}`;
+  });
 }
 
 /** Renders into both #queue-list-home (Home tab) and #queue-list-tab (Queue tab) - same data, same markup, two places to see it. */
@@ -466,6 +491,16 @@ function wireClicks(socket) {
     const hostButton = event.target.closest('.host-action');
     if (hostButton) {
       socket.emit(`playback:${hostButton.dataset.action}`, {}, (response) => {
+        if (response?.error) showToast(response.error);
+      });
+      return;
+    }
+
+    // The queue-mode Switch button carries the mode to switch TO, so the
+    // click handler doesn't need to know what's currently active.
+    const modeToggle = event.target.closest('.mode-toggle');
+    if (modeToggle) {
+      socket.emit('queue:mode', { mode: modeToggle.dataset.mode }, (response) => {
         if (response?.error) showToast(response.error);
       });
       return;

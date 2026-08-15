@@ -268,6 +268,37 @@ input {
   margin-bottom: 2px;
 }
 
+/* --- Queue mode banner (Fair rotation / Majority rule) --- */
+
+.queue-mode-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.queue-mode-bar:empty {
+  display: none;
+}
+
+.mode-toggle {
+  flex-shrink: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 /* --- Golden record badge + end-of-session election results --- */
 
 .golden-badge {

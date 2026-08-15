@@ -17,7 +17,7 @@ export function roomName(sessionId) {
  * (a handful of guests, a handful of tracks), so this is cheap.
  */
 export async function broadcastState(io, session) {
-  const orderedQueue = sortQueue(session.queue);
+  const orderedQueue = sortQueue(session.queue, session.queueMode);
   const guestCount = connectedGuestCount(session);
   // Computed once per broadcast, not per vote: the threshold moves as
   // people join/leave, so every track's "X of Y to skip" display should
@@ -40,6 +40,7 @@ export async function broadcastState(io, session) {
       playbackBlockedReason: session.playbackBlockedReason,
       isPlaying: session.isPlaying,
       progressMs: session.progressMs,
+      queueMode: session.queueMode,
     });
   }
 }

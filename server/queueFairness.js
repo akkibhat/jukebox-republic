@@ -48,12 +48,50 @@ function sortKey(item) {
   return item.round - item.netVotes * 0.01;
 }
 
-/** Sorts a queue (array of track items) into fair play order. Does not mutate the input. */
-export function sortQueue(queue) {
+/**
+ * Sorts a queue (array of track items) into play order. Does not mutate
+ * the input. Which order depends on the session's queue mode - the "law
+ * of the land" the host can switch mid-session:
+ *
+ * - 'fair' (default): round-robin by contributor, as described above.
+ * - 'crowd': pure vote ordering, for small groups where round-robin
+ *   matters less and the fun is in rallying votes. See sortByCrowdChoice.
+ */
+export function sortQueue(queue, mode = 'fair') {
+  if (mode === 'crowd') return sortByCrowdChoice(queue);
+
   return [...queue].sort((a, b) => {
     const keyDiff = sortKey(a) - sortKey(b);
     if (keyDiff !== 0) return keyDiff;
     // Stable tiebreaker for same round + same net votes: first added, first played.
+    return a.addedAt - b.addedAt;
+  });
+}
+
+/**
+ * Crowd-choice scoring: every 10 minutes spent waiting in the queue is
+ * worth one effective upvote. That's the anti-starvation valve - in a
+ * pure "most votes first" queue, a zero-vote pick could be leapfrogged
+ * forever by a steady stream of fresh upvoted songs; with the waiting
+ * bonus it climbs on patience alone and eventually plays.
+ *
+ * The time term also quietly implements "a new song with the same votes
+ * slots BELOW the ones already there": the older song has strictly more
+ * waiting time, so it always scores a hair higher at equal votes.
+ */
+const WAIT_BOOST_MS = 10 * 60 * 1000;
+
+function crowdScore(item, now) {
+  return item.netVotes + (now - item.addedAt) / WAIT_BOOST_MS;
+}
+
+function sortByCrowdChoice(queue) {
+  // One shared timestamp per sort, so every item is scored against the
+  // same "now" and the comparator stays consistent mid-sort.
+  const now = Date.now();
+  return [...queue].sort((a, b) => {
+    const scoreDiff = crowdScore(b, now) - crowdScore(a, now);
+    if (scoreDiff !== 0) return scoreDiff;
     return a.addedAt - b.addedAt;
   });
 }
