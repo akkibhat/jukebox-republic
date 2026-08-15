@@ -183,6 +183,29 @@ input {
   width: 100%;
 }
 
+/* Host-only volume row in the session header. The generic input styling
+   above (background, border, padding) is meant for text fields and makes a
+   range slider look like a pill - reset it here. */
+.volume-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.volume-row input[type='range'] {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.volume-icon {
+  color: var(--text-dim);
+  font-size: 0.95rem;
+}
+
 /* --- Now playing --- */
 
 .now-playing-card {

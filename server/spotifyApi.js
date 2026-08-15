@@ -153,6 +153,16 @@ export async function pausePlayback(accessToken) {
   await spotifyFetch('/me/player/pause', accessToken, { method: 'PUT' });
 }
 
+/**
+ * Sets playback volume (0-100) on whatever device is currently playing.
+ * Not every Connect device supports remote volume - restricted ones
+ * (some speakers, TVs) answer 403, which the caller turns into a
+ * "this device won't allow it" message rather than a retry.
+ */
+export async function setVolume(accessToken, volumePercent) {
+  await spotifyFetch(`/me/player/volume?volume_percent=${volumePercent}`, accessToken, { method: 'PUT' });
+}
+
 export async function resumePlayback(accessToken) {
   await spotifyFetch('/me/player/play', accessToken, { method: 'PUT' });
 }

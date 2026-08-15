@@ -570,8 +570,8 @@ async function runSearch(sessionId, query, resultsEl, socket) {
 // --- Small helpers ---------------------------------------------------------
 
 let toastTimer;
-/** Brief, non-blocking error message (duplicate song, self-downvote, host-only action, etc). */
-function showToast(message) {
+/** Brief, non-blocking error message (duplicate song, self-downvote, host-only action, etc). Exported so host.js can reuse it for its own controls. */
+export function showToast(message) {
   let toast = document.getElementById('toast');
   if (!toast) {
     toast = document.createElement('div');

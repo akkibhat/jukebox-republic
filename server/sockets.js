@@ -18,7 +18,7 @@ import { nextRoundForGuest, applyVote } from './queueFairness.js';
 import { buildSessionRecap } from './sessionRecap.js';
 import { broadcastState, roomName } from './broadcast.js';
 import { startPlaybackLoop, stopPlaybackLoop, skipCurrentTrack } from './playbackEngine.js';
-import { pausePlayback, resumePlayback } from './spotifyApi.js';
+import { pausePlayback, resumePlayback, setVolume } from './spotifyApi.js';
 import { ensureFreshToken } from './spotifyAuth.js';
 
 export function registerSocketHandlers(io) {
@@ -172,6 +172,32 @@ export function registerSocketHandlers(io) {
       } catch (err) {
         console.error('[sockets] playback:resume failed:', err.message);
         ack?.({ error: 'Could not resume. Is Spotify open on the host phone?' });
+      }
+    });
+
+    socket.on('playback:volume', async ({ percent }, ack) => {
+      const session = requireHost(socket, ack);
+      if (!session) return;
+
+      const requested = Number(percent);
+      if (!Number.isFinite(requested)) return ack?.({ error: 'Volume must be a number.' });
+      const clamped = Math.max(0, Math.min(100, Math.round(requested)));
+
+      try {
+        const accessToken = await ensureFreshToken(session);
+        await setVolume(accessToken, clamped);
+        ack?.({ ok: true });
+      } catch (err) {
+        console.error('[sockets] playback:volume failed:', err.message);
+        // 403 here means the current device refuses remote volume changes
+        // (a hardware/platform restriction), not a transient failure -
+        // no point suggesting a retry for that one.
+        ack?.({
+          error:
+            err.status === 403
+              ? "This playback device doesn't allow volume control."
+              : 'Could not change volume. Try again in a moment.',
+        });
       }
     });
 
