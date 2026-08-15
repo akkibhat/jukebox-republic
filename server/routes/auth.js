@@ -4,8 +4,9 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { buildAuthorizeUrl, exchangeCodeForTokens } from '../spotifyAuth.js';
-import { getCurrentUserProfile } from '../spotifyApi.js';
+import { getCurrentUserProfile, getPlaylistTracks } from '../spotifyApi.js';
 import { createSession } from '../sessionStore.js';
+import { pickSeedPlaylist } from '../autopilotMix.js';
 
 export const authRouter = Router();
 
@@ -40,6 +41,21 @@ authRouter.get('/callback', async (req, res) => {
       hostDisplayName: profile.displayName,
       tokens,
     });
+
+    // Seeded once, right at trip start, rather than on-demand the first
+    // time the queue runs dry - that would add a delay right when the car
+    // wants music. Not fatal if it fails (rate limit, a since-deleted
+    // playlist) - the trip still starts fine, just without an Autopilot
+    // Mix ready until someone adds a real song.
+    const seedPlaylist = pickSeedPlaylist();
+    try {
+      session.fallbackTracks = await getPlaylistTracks(tokens.accessToken, seedPlaylist.id);
+      console.log(
+        `[auth] seeded Autopilot Mix for ${session.roomCode} from "${seedPlaylist.label}" (${session.fallbackTracks.length} tracks)`
+      );
+    } catch (err) {
+      console.error('[auth] failed to seed Autopilot Mix:', err.message);
+    }
 
     res.redirect(`/host.html?session=${session.id}`);
   } catch (err) {

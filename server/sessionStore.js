@@ -39,7 +39,7 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
     nowPlaying: null, // { uri, name, artist, albumArt, durationMs, startedAt, votes, netVotes }
     skippedSongs: [], // tracks the group voted out - see addToSkippedSongs below
     playHistory: [], // rolling "recently played" log - see addToPlayHistory below
-    fallbackTracks: [], // host-curated backup picks for when the real queue runs dry
+    fallbackTracks: [], // the Autopilot Mix - seeded once at login from autopilotMix.js, see routes/auth.js
     fallbackIndex: 0, // cycles through fallbackTracks in order rather than repeating the first one forever
     playbackBlockedReason: null, // set by playbackEngine.js when Spotify can't see any device to play on
     isPlaying: null, // true/false once known from Spotify; null until the first poll or host action reports it
@@ -113,7 +113,7 @@ export function makeQueueItem({ track, guest, round }) {
 }
 
 /**
- * A track cartunes picked from the backup playlist rather than the real
+ * A track cartunes picked from the Autopilot Mix rather than the real
  * queue, shaped exactly like a normal queue item so it can be voted on,
  * skipped, and land in history the same way anything else does. `addedBy`
  * is a synthetic id ('fallback') that can never match a real guestId, so
@@ -129,7 +129,7 @@ export function makeFallbackNowPlaying(track) {
     albumArt: track.albumArt,
     durationMs: track.durationMs,
     explicit: Boolean(track.explicit),
-    addedBy: { id: 'fallback', name: 'Backup playlist' },
+    addedBy: { id: 'fallback', name: 'Autopilot Mix' },
     addedAt: Date.now(),
     round: 0,
     votes: new Map(),
@@ -143,8 +143,8 @@ export function makeFallbackNowPlaying(track) {
  * control during a dead zone. Shaped like any other now-playing item so
  * the existing "is it about to finish" progress check in playbackEngine.js
  * applies to it unchanged, and the group can still vote on it. `addedBy`
- * is a synthetic id, same trick as the backup playlist, so the
- * self-downvote guard can't accidentally match a real guest here either.
+ * is a synthetic id, same trick as the Autopilot Mix, so the self-downvote
+ * guard can't accidentally match a real guest here either.
  */
 export function makeExternalNowPlaying(track) {
   return {

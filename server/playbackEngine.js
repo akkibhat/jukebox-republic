@@ -80,9 +80,9 @@ async function pollAndAdvance(session, io) {
 
 /**
  * Picks what plays next: the fairly-ordered queue if it has anything,
- * otherwise a cycling pick from the host's backup playlist if one's been
- * set. Returns whether it actually got something going, so callers (and
- * the poll loop) know whether to keep waiting or move on.
+ * otherwise a cycling pick from the trip's Autopilot Mix. Returns whether
+ * it actually got something going, so callers (and the poll loop) know
+ * whether to keep waiting or move on.
  */
 async function tryStartNext(session, io) {
   const [next, ...rest] = sortQueue(session.queue);
@@ -113,7 +113,7 @@ async function tryStartNext(session, io) {
     // this would just throw, get swallowed by the poll loop's catch, and
     // leave the same broken track stuck at the front of the queue forever
     // - every 4s poll would retry it and fail the same way. Instead, drop
-    // it (or move the backup playlist's cursor past it) and let the very
+    // it (or move the Autopilot Mix's cursor past it) and let the very
     // next poll tick try whatever comes after it.
     console.error(`[playback] session ${session.roomCode} could not start "${trackToPlay.name}":`, err.message);
     session.playbackBlockedReason = `Spotify wouldn't start "${trackToPlay.name}" - trying the next song.`;
@@ -134,7 +134,7 @@ async function tryStartNext(session, io) {
   return true;
 }
 
-/** The backup playlist cycles in order (not randomly) so it's predictable, looping back to the start once it runs through. */
+/** The Autopilot Mix cycles in order (not randomly) so it's predictable, looping back to the start once it runs through. */
 function nextFallbackTrack(session) {
   if (session.fallbackTracks.length === 0) return null;
   return session.fallbackTracks[session.fallbackIndex % session.fallbackTracks.length];
@@ -179,7 +179,7 @@ export async function advanceToNext(session, io, { votedOut = false } = {}) {
   session.nowPlaying = null;
   await tryStartNext(session, io);
   if (!session.nowPlaying) {
-    await broadcastState(io, session); // queue (and any backup playlist) ran dry - let clients know nothing's playing
+    await broadcastState(io, session); // queue (and the Autopilot Mix) ran dry - let clients know nothing's playing
   }
 }
 

@@ -174,41 +174,6 @@ export function registerSocketHandlers(io) {
       ack?.({ ok: true });
     });
 
-    // --- Backup playlist (host-managed) -----------------------------------
-    // Kicks in only once the real queue is empty - see tryStartNext in
-    // playbackEngine.js. Kept host-only since it's a "set it up before the
-    // trip" kind of list, not something guests are voting into.
-
-    socket.on('fallback:add', async ({ track }, ack) => {
-      const session = requireHost(socket, ack);
-      if (!session) return;
-
-      if (session.fallbackTracks.some((t) => t.uri === track.uri)) {
-        return ack?.({ error: 'That song is already in the backup playlist.' });
-      }
-
-      session.fallbackTracks.push({
-        uri: track.uri,
-        name: track.name,
-        artist: track.artist,
-        albumArt: track.albumArt,
-        durationMs: track.durationMs,
-        explicit: Boolean(track.explicit),
-      });
-
-      ack?.({ ok: true });
-      await broadcastState(io, session);
-    });
-
-    socket.on('fallback:remove', async ({ uri }, ack) => {
-      const session = requireHost(socket, ack);
-      if (!session) return;
-
-      session.fallbackTracks = session.fallbackTracks.filter((t) => t.uri !== uri);
-      ack?.({ ok: true });
-      await broadcastState(io, session);
-    });
-
     socket.on('disconnect', async () => {
       const session = getSession(socket.data.sessionId);
       if (!session) return;

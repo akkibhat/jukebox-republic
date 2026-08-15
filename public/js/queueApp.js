@@ -1,8 +1,8 @@
 // Shared logic between host.html and guest.html - once a sessionId is known
 // (the host gets it from its own URL, a guest resolves it from a room
 // code), the experience is identical except the host also gets playback
-// override buttons and backup-playlist management. Both pages call
-// startQueueApp() once they know which session to join.
+// override buttons. Both pages call startQueueApp() once they know which
+// session to join.
 import { getOrCreateGuestId, getStoredName, setStoredName } from './identity.js';
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -12,11 +12,12 @@ const SEARCH_DEBOUNCE_MS = 300;
 let isHostView = false;
 let myGuestId = null;
 
-// Caches for the "read-only list with a Re-add button" sections (skipped
-// songs, play history) - a click only carries a list id + index, so this
-// is where the full track objects live to look up when that fires. Same
-// trick runSearch uses for its own results.
-const readdCaches = { 'skipped-list': [], 'history-list': [] };
+// Caches for the "read-only list with a button that sends it to the main
+// queue" sections (Autopilot Mix, skipped songs, play history) - a click
+// only carries a list id + index, so this is where the full track objects
+// live to look up when that fires. Same trick runSearch uses for its own
+// results.
+const readdCaches = { 'autopilot-list': [], 'skipped-list': [], 'history-list': [] };
 
 /**
  * Joins the session and wires up the whole real-time UI. Returns a promise
@@ -89,9 +90,9 @@ function renderState(state) {
 
   renderNowPlaying(state.nowPlaying, state.playbackBlockedReason, state.isPlaying);
   renderQueue(state.queue);
+  renderReaddableList('autopilot-section', 'autopilot-list', state.fallbackTracks, 'Add to queue');
   renderReaddableList('skipped-section', 'skipped-list', state.skippedSongs);
   renderReaddableList('history-section', 'history-list', state.playHistory);
-  renderFallbackTracks(state.fallbackTracks);
 }
 
 function renderNowPlaying(track, playbackBlockedReason, isPlaying) {
@@ -151,13 +152,13 @@ function renderQueue(queue) {
 }
 
 /**
- * Renders a read-only track list where every row can be sent back into the
- * queue with one tap - used for both the skipped-songs list and play
- * history, which are shaped identically on the wire. The whole section
- * hides itself when empty, rather than showing an empty heading with
- * nothing under it.
+ * Renders a read-only track list where every row can be sent into the main
+ * queue with one tap - used for the Autopilot Mix preview, the skipped-
+ * songs list, and play history, all shaped identically on the wire. The
+ * whole section hides itself when empty, rather than showing an empty
+ * heading with nothing under it.
  */
-function renderReaddableList(sectionId, listId, tracks) {
+function renderReaddableList(sectionId, listId, tracks, buttonLabel = 'Re-add') {
   const section = document.getElementById(sectionId);
   const list = document.getElementById(listId);
   if (!section || !list) return;
@@ -180,43 +181,7 @@ function renderReaddableList(sectionId, listId, tracks) {
             <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}</div>
             <div class="track-artist">${escapeHtml(track.artist)}</div>
           </div>
-          <button class="button button-secondary readd-button" data-list="${listId}" data-index="${index}">Re-add</button>
-        </div>
-      `
-    )
-    .join('');
-}
-
-/**
- * The host's backup playlist, visible to everyone (so a song nobody
- * remembers adding makes sense - "oh, that's the backup playlist") but
- * only host-editable. Cycles in the order shown here once the real queue
- * runs dry - see nextFallbackTrack in playbackEngine.js.
- */
-function renderFallbackTracks(fallbackTracks) {
-  const section = document.getElementById('fallback-section');
-  const list = document.getElementById('fallback-list');
-  if (!section || !list) return;
-
-  const tracks = fallbackTracks || [];
-
-  if (tracks.length === 0) {
-    section.style.display = 'none';
-    list.innerHTML = '';
-    return;
-  }
-
-  section.style.display = 'block';
-  list.innerHTML = tracks
-    .map(
-      (track) => `
-        <div class="queue-item">
-          <div class="art" style="background-image: url('${track.albumArt || ''}')"></div>
-          <div class="track-info">
-            <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}</div>
-            <div class="track-artist">${escapeHtml(track.artist)}</div>
-          </div>
-          ${isHostView ? `<button class="remove-button fallback-remove-button" data-uri="${escapeHtml(track.uri)}" title="Remove from backup playlist">&times;</button>` : ''}
+          <button class="button button-secondary readd-button" data-list="${listId}" data-index="${index}">${buttonLabel}</button>
         </div>
       `
     )
@@ -253,7 +218,7 @@ function explicitBadgeHtml(track) {
 /** Only ever shown on now-playing, since these synthetic sources never appear as a queued item. */
 function addedByLineHtml(track) {
   if (track.addedBy.id === 'external') return "Playing directly on Spotify - not from the queue";
-  if (track.addedBy.id === 'fallback') return 'From the backup playlist';
+  if (track.addedBy.id === 'fallback') return 'From the Autopilot Mix';
   return `Added by ${escapeHtml(track.addedBy.name)}`;
 }
 
@@ -333,18 +298,9 @@ function wireClicks(socket) {
       return;
     }
 
-    const fallbackRemoveButton = event.target.closest('.fallback-remove-button');
-    if (fallbackRemoveButton) {
-      socket.emit('fallback:remove', { uri: fallbackRemoveButton.dataset.uri }, (response) => {
-        if (response?.error) showToast(response.error);
-      });
-      return;
-    }
-
-    // Plain .remove-button (not the fallback-specific one above) is "take
-    // my own song out of the queue" - only ever rendered on a track this
-    // guest added, so no ownership check needed client-side; the server
-    // checks it anyway.
+    // "Take my own song out of the queue" - only ever rendered on a track
+    // this guest added, so no ownership check needed client-side; the
+    // server checks it anyway.
     const removeButton = event.target.closest('.remove-button');
     if (removeButton) {
       const itemId = removeButton.closest('[data-item-id]')?.dataset.itemId;
@@ -388,7 +344,6 @@ async function runSearch(sessionId, query, resultsEl, socket) {
             <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}</div>
             <div class="track-artist">${escapeHtml(track.artist)}</div>
           </div>
-          ${isHostView ? `<button class="fallback-add-button" data-index="${index}" title="Add to backup playlist">&#9733;</button>` : ''}
           <button class="add-button" data-index="${index}">+</button>
         </div>
       `
@@ -403,18 +358,6 @@ async function runSearch(sessionId, query, resultsEl, socket) {
       });
       resultsEl.innerHTML = '';
       document.getElementById('search-input').value = '';
-    });
-  });
-
-  resultsEl.querySelectorAll('.fallback-add-button').forEach((button) => {
-    button.addEventListener('click', () => {
-      const track = data.results[Number(button.dataset.index)];
-      socket.emit('fallback:add', { track }, (response) => {
-        if (response?.error) showToast(response.error);
-        else showToast(`Added "${track.name}" to the backup playlist`);
-      });
-      // Deliberately doesn't clear the search box - adding a few backup
-      // tracks in a row from the same search is the expected flow.
     });
   });
 }

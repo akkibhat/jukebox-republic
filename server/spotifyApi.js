@@ -62,6 +62,43 @@ export async function searchTracks(accessToken, query, limit = 12) {
   return data.tracks.items.map(toTrackSummary);
 }
 
+/**
+ * Every track in a public Spotify playlist - used once per trip to seed
+ * the Autopilot Mix. Spotify caps a single response at 100 tracks, so this
+ * pages through using the paging object's `next` link until it runs out
+ * (which `next: null` signals). Playlists can contain local files or
+ * regionally-unavailable tracks, which come back with a null/non-Spotify
+ * uri; those are filtered out since playTrack() can't do anything with
+ * them (Spotify's playback API only accepts real spotify:track: uris).
+ * MAX_PAGES is just a safety net against an unexpected pagination bug
+ * looping forever - real road-trip playlists top out a few hundred tracks,
+ * nowhere near the 2,000 that would take.
+ */
+const PLAYLIST_PAGE_SIZE = 100;
+const MAX_PLAYLIST_PAGES = 20;
+
+export async function getPlaylistTracks(accessToken, playlistId) {
+  const tracks = [];
+  let path = `/playlists/${playlistId}/tracks?limit=${PLAYLIST_PAGE_SIZE}&fields=items(track(uri,name,artists,album,duration_ms,explicit)),next`;
+
+  for (let page = 0; path && page < MAX_PLAYLIST_PAGES; page += 1) {
+    const data = await spotifyFetch(path, accessToken);
+    if (!data) break;
+
+    for (const item of data.items || []) {
+      if (item.track?.uri?.startsWith('spotify:track:')) {
+        tracks.push(toTrackSummary(item.track));
+      }
+    }
+
+    // `next` is a fully-qualified URL (https://api.spotify.com/v1/...) -
+    // spotifyFetch wants a path relative to API_BASE, so strip that prefix.
+    path = data.next ? data.next.replace(API_BASE, '') : null;
+  }
+
+  return tracks;
+}
+
 /** What's currently playing on the host's account, wherever it's playing. */
 export async function getPlaybackState(accessToken) {
   const data = await spotifyFetch('/me/player', accessToken);
