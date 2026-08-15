@@ -104,3 +104,15 @@ public/
   see `END_OF_TRACK_LEAD_MS` in `playbackEngine.js`.
 - No persistence of past sessions, favorite songs, or stats. Could be worth
   adding later if there's demand for "what did we listen to last time."
+
+## License
+
+Copyright 2026 Akki Bhat. Released under the
+[PolyForm Noncommercial License 1.0.0](LICENSE): you're free to run,
+modify, and share it for personal, hobby, academic, or other
+noncommercial purposes.
+
+**Any commercial use needs a separate license** - get in touch first.
+Note that Spotify's own Developer Terms independently restrict
+commercializing anything built on their API, so a commercial deployment
+would need their agreement as well as this one.

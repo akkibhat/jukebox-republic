@@ -8,7 +8,8 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js"
   },
-  "license": "UNLICENSED",
+  "author": "Akki Bhat",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "dependencies": {
     "@google-cloud/firestore": "^9.0.0",
