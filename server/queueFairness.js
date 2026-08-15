@@ -59,18 +59,18 @@ export function sortQueue(queue) {
 }
 
 /**
- * How many net downvotes a track can absorb before the group has spoken:
- * threshold = max(1, connectedGuestCount - offset).
- *
- * Using a fraction of the room (rather than a fixed number like Apollo's
- * "3 votes") means the bar scales with the trip: 3 people in the car
- * shouldn't need 3 unanimous downvotes to kill a song (that's everyone),
- * but a 10-person road trip shouldn't have a song killed by 3 haters.
- * offset=2 (the default) means "all but two of the room has to dislike it" -
- * tune via VOTE_SKIP_OFFSET in .env.
+ * How many downvotes it takes for the group to skip/remove a track: simple
+ * majority, half the connected car rounded up. Two people means either one
+ * can veto a song outright (1 of 2 - there's no meaningful "majority" of
+ * two, so one objection is enough). Three needs two people to agree.
+ * Five needs three. It scales the same way regardless of how many people
+ * are actually in the car - a fixed number (Apollo's old "3 votes")
+ * either takes forever to hit with 2 people or gets curb-stomped by a
+ * vocal minority once you're at 8, whereas "does more than half the room
+ * agree" means the same thing at any size.
  */
-export function downvoteThreshold(connectedGuestCount, offset) {
-  return Math.max(1, connectedGuestCount - offset);
+export function downvoteThreshold(connectedGuestCount) {
+  return Math.max(1, Math.ceil(connectedGuestCount / 2));
 }
 
 /**
@@ -78,8 +78,16 @@ export function downvoteThreshold(connectedGuestCount, offset) {
  * track at a time (voting the other way replaces it; voting the same way
  * again retracts it - tap to toggle). Returns the updated track and
  * whether it just crossed the skip/remove threshold.
+ *
+ * A guest can't downvote their own submission - without this, someone
+ * could add a song and immediately downvote it themselves to fake progress
+ * toward the skip threshold, which defeats the point of a *group* vote.
  */
-export function applyVote(item, guestId, direction, connectedGuestCount, offset) {
+export function applyVote(item, guestId, direction, connectedGuestCount) {
+  if (direction === 'down' && item.addedBy.id === guestId) {
+    return { item, shouldRemove: false, rejected: true, reason: "You can't downvote your own song." };
+  }
+
   const already = item.votes.get(guestId);
 
   if (already === direction) {
@@ -96,8 +104,8 @@ export function applyVote(item, guestId, direction, connectedGuestCount, offset)
     if (v === 'down') downvotes += 1;
   }
 
-  const threshold = downvoteThreshold(connectedGuestCount, offset);
+  const threshold = downvoteThreshold(connectedGuestCount);
   const shouldRemove = downvotes >= threshold;
 
-  return { item, shouldRemove, threshold, downvotes };
+  return { item, shouldRemove, threshold, downvotes, rejected: false };
 }

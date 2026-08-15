@@ -20,9 +20,14 @@ with their own taste, and the group can vote a bad pick off the road.
   2nd before anyone's 3rd, and so on. Add five songs in a row and you've
   still only guaranteed yourself one turn before the rest of the car gets a
   turn too.
-- Anyone can thumbs-down a song, current or queued. Enough downvotes (scaled
-  to how many people are actually in the car - see below) sinks it and
-  eventually pulls it from the queue or skips it if it's already playing.
+- Anyone can thumbs-down a song, current or queued. Once more than half the
+  connected car agrees (majority rule - one person in a 2-person car, two of
+  three, two of four, three of five...), it's skipped/removed. It doesn't
+  vanish, though - it lands on a **Skipped songs** list, and anyone can
+  re-add it if they change their mind.
+- The host always has manual Pause/Resume/Skip controls regardless of what
+  the vote says - the group's vote is a way for everyone *else* to weigh in,
+  not a way to lock the driver out of their own stereo.
 
 See [`server/queueFairness.js`](server/queueFairness.js) for the actual
 rotation and voting logic - it's a small, heavily-commented file and the

@@ -37,6 +37,8 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
     guests: new Map(), // guestId -> { id, name, submissionCount, connected }
     queue: [], // array of queue items, see addTrackToQueue below
     nowPlaying: null, // { uri, name, artist, albumArt, durationMs, startedAt, votes, netVotes }
+    skippedSongs: [], // tracks the group voted out - see addToSkippedSongs below
+    playbackBlockedReason: null, // set by playbackEngine.js when Spotify can't see any device to play on
   };
 
   sessions.set(id, session);
@@ -96,9 +98,44 @@ export function makeQueueItem({ track, guest, round }) {
   };
 }
 
-/** Serializes a queue item (or nowPlaying track) for sending over the socket - Maps don't survive JSON. */
-export function serializeItem(item, forGuestId) {
+/**
+ * Moves a track the group voted out onto the skipped list instead of just
+ * discarding it - a democratic "no" isn't necessarily forever, someone
+ * might still want it back later. Votes are stripped since a re-add starts
+ * that track's standing with the group fresh.
+ */
+export function addToSkippedSongs(session, item) {
+  session.skippedSongs.unshift({
+    id: item.id,
+    uri: item.uri,
+    name: item.name,
+    artist: item.artist,
+    albumArt: item.albumArt,
+    durationMs: item.durationMs,
+    addedBy: item.addedBy,
+  });
+}
+
+/** Called when a skipped track gets re-added to the queue, so it stops showing up in both places at once. */
+export function removeFromSkippedSongs(session, uri) {
+  session.skippedSongs = session.skippedSongs.filter((s) => s.uri !== uri);
+}
+
+/**
+ * Serializes a queue item (or nowPlaying track) for sending over the socket
+ * - Maps don't survive JSON. `threshold` (how many downvotes it takes to
+ * sink this track, given who's currently connected) is passed in by the
+ * caller rather than computed here, since it depends on connectedGuestCount
+ * which this function has no reason to know about on its own.
+ */
+export function serializeItem(item, forGuestId, { threshold } = {}) {
   if (!item) return null;
+
+  let downvotes = 0;
+  for (const vote of item.votes.values()) {
+    if (vote === 'down') downvotes += 1;
+  }
+
   return {
     id: item.id,
     uri: item.uri,
@@ -109,6 +146,8 @@ export function serializeItem(item, forGuestId) {
     addedBy: item.addedBy,
     round: item.round,
     netVotes: item.netVotes,
+    downvotes,
+    threshold: threshold ?? null,
     myVote: forGuestId ? item.votes.get(forGuestId) || null : null,
   };
 }

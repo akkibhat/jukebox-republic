@@ -20,8 +20,22 @@ async function spotifyFetch(path, accessToken, options = {}) {
     const body = await response.text();
     throw new Error(`Spotify API ${path} failed: ${response.status} ${body}`);
   }
+
   const text = await response.text();
-  return text ? JSON.parse(text) : null;
+  if (!text) return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    // The playback-control endpoints (pause/play especially) sometimes
+    // answer with a 2xx status but a body that isn't valid JSON, even
+    // though the command itself went through fine - the status code
+    // already told us it succeeded, so there's nothing worth throwing
+    // over. This was showing up as "it worked but an error popped up"
+    // on the host's Pause/Resume buttons.
+    console.warn(`[spotify] ${path} returned a non-JSON success body, ignoring it:`, text.slice(0, 80));
+    return null;
+  }
 }
 
 function toTrackSummary(track) {
@@ -58,6 +72,25 @@ export async function getPlaybackState(accessToken) {
     deviceId: data.device?.id || null,
     deviceName: data.device?.name || null,
   };
+}
+
+/**
+ * Every Spotify Connect device this account can currently see (phone,
+ * speaker, desktop app...), active or not. This is distinct from the
+ * device on getPlaybackState, which is only populated once something is
+ * already playing/paused there - useless for starting playback from cold,
+ * which is exactly what happens the moment a trip's first song is added.
+ * A device shows up here as soon as its Spotify app is open, whether or
+ * not it's actively playing anything.
+ */
+export async function getAvailableDevices(accessToken) {
+  const data = await spotifyFetch('/me/player/devices', accessToken);
+  return (data?.devices || []).map((d) => ({
+    id: d.id,
+    name: d.name,
+    type: d.type,
+    isActive: d.is_active,
+  }));
 }
 
 /** Starts playback of a specific track URI on the host's currently active device (their phone). */

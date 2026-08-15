@@ -3,7 +3,7 @@
 // sockets.js (reacting to guest actions) and playbackEngine.js (reacting to
 // the clock) can push updates without importing each other.
 import { serializeItem, connectedGuestCount } from './sessionStore.js';
-import { sortQueue } from './queueFairness.js';
+import { sortQueue, downvoteThreshold } from './queueFairness.js';
 
 export function roomName(sessionId) {
   return `session:${sessionId}`;
@@ -18,15 +18,23 @@ export function roomName(sessionId) {
  */
 export async function broadcastState(io, session) {
   const orderedQueue = sortQueue(session.queue);
+  const guestCount = connectedGuestCount(session);
+  // Computed once per broadcast, not per vote: the threshold moves as
+  // people join/leave, so every track's "X of Y to skip" display should
+  // always reflect who's connected *right now*, not who was connected the
+  // last time someone tapped a vote button.
+  const threshold = downvoteThreshold(guestCount);
   const sockets = await io.in(roomName(session.id)).fetchSockets();
 
   for (const socket of sockets) {
     const guestId = socket.data.guestId;
     socket.emit('state', {
       roomCode: session.roomCode,
-      nowPlaying: serializeItem(session.nowPlaying, guestId),
-      queue: orderedQueue.map((item) => serializeItem(item, guestId)),
-      connectedGuestCount: connectedGuestCount(session),
+      nowPlaying: serializeItem(session.nowPlaying, guestId, { threshold }),
+      queue: orderedQueue.map((item) => serializeItem(item, guestId, { threshold })),
+      skippedSongs: session.skippedSongs,
+      connectedGuestCount: guestCount,
+      playbackBlockedReason: session.playbackBlockedReason,
     });
   }
 }

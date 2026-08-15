@@ -17,8 +17,15 @@ if (!sessionId) {
         <div class="room-code">${info.roomCode}</div>
         <p>Have friends scan this or go to <strong>${new URL(info.joinUrl).host}</strong> and enter the code.</p>
         <img src="${info.qrCodeDataUrl}" alt="QR code to join the trip" />
+        <button class="button button-secondary end-trip-button" id="end-trip-button" type="button">End trip</button>
       `;
-      startQueueApp(sessionId);
+      return startQueueApp(sessionId, { isHost: true });
+    })
+    .then((socket) => {
+      document.getElementById('end-trip-button').addEventListener('click', () => {
+        if (!confirm("End this trip for everyone? This can't be undone.")) return;
+        socket.emit('session:end');
+      });
     })
     .catch(() => {
       document.getElementById('session-header').innerHTML =

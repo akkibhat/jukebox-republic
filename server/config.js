@@ -31,10 +31,4 @@ export const config = {
       'user-read-currently-playing',
     ].join(' '),
   },
-
-  // How many *fewer* than the connected-guest count a track needs in net
-  // downvotes before it's skipped/removed. See queueFairness.js for the
-  // full explanation of why this is "connectedUsers - offset" rather than
-  // a fixed number.
-  voteSkipOffset: Number(process.env.VOTE_SKIP_OFFSET || 2),
 };
