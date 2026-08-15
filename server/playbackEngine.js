@@ -8,7 +8,7 @@
 import { getPlaybackState, getAvailableDevices, playTrack } from './spotifyApi.js';
 import { ensureFreshToken } from './spotifyAuth.js';
 import { sortQueue } from './queueFairness.js';
-import { addToSkippedSongs, addToPlayHistory, makeFallbackNowPlaying } from './sessionStore.js';
+import { addToSkippedSongs, addToPlayHistory, makeFallbackNowPlaying, makeExternalNowPlaying } from './sessionStore.js';
 import { broadcastState } from './broadcast.js';
 
 const POLL_INTERVAL_MS = 4000;
@@ -60,10 +60,20 @@ async function pollAndAdvance(session, io) {
 
   if (!state) return; // host's device went away (asleep, disconnected) - just wait for it to come back
 
-  const trackFinishing = state.progressMs + END_OF_TRACK_LEAD_MS >= session.nowPlaying.durationMs;
-  const trackChangedUnderneathUs = state.track.uri !== session.nowPlaying.uri;
+  if (state.track.uri !== session.nowPlaying.uri) {
+    // Something's playing that cartunes didn't pick - most likely the host
+    // took manual control (e.g. during a dead zone) rather than a glitch.
+    // Rather than yanking it away mid-song, adopt it as the thing we're
+    // watching. It's still fully votable, and the very next poll tick's
+    // "is it about to finish" check below will reclaim the queue the
+    // moment THIS track ends instead of interrupting it.
+    session.nowPlaying = makeExternalNowPlaying(state.track);
+    await broadcastState(io, session);
+    return;
+  }
 
-  if (trackFinishing || trackChangedUnderneathUs) {
+  const trackFinishing = state.progressMs + END_OF_TRACK_LEAD_MS >= session.nowPlaying.durationMs;
+  if (trackFinishing) {
     await advanceToNext(session, io);
   }
 }

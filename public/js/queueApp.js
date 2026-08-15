@@ -112,7 +112,7 @@ function renderNowPlaying(track, playbackBlockedReason, isPlaying) {
         <div class="track-info">
           <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}</div>
           <div class="track-artist">${escapeHtml(track.artist)}</div>
-          <div class="added-by">Added by ${escapeHtml(track.addedBy.name)}</div>
+          <div class="added-by">${addedByLineHtml(track)}</div>
           ${skipProgressHtml(track)}
         </div>
         ${voteButtonsHtml(track)}
@@ -248,6 +248,13 @@ function skipProgressHtml(track) {
 /** Small "E" tag next to explicit tracks, everywhere a track name is rendered. */
 function explicitBadgeHtml(track) {
   return track.explicit ? '<span class="explicit-badge" title="Explicit">E</span>' : '';
+}
+
+/** Only ever shown on now-playing, since these synthetic sources never appear as a queued item. */
+function addedByLineHtml(track) {
+  if (track.addedBy.id === 'external') return "Playing directly on Spotify - not from the queue";
+  if (track.addedBy.id === 'fallback') return 'From the backup playlist';
+  return `Added by ${escapeHtml(track.addedBy.name)}`;
 }
 
 /**

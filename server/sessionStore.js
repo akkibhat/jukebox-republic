@@ -138,6 +138,32 @@ export function makeFallbackNowPlaying(track) {
 }
 
 /**
+ * A track cartunes is watching but didn't choose - someone (almost always
+ * the host) started it directly in Spotify, most likely taking manual
+ * control during a dead zone. Shaped like any other now-playing item so
+ * the existing "is it about to finish" progress check in playbackEngine.js
+ * applies to it unchanged, and the group can still vote on it. `addedBy`
+ * is a synthetic id, same trick as the backup playlist, so the
+ * self-downvote guard can't accidentally match a real guest here either.
+ */
+export function makeExternalNowPlaying(track) {
+  return {
+    id: randomUUID(),
+    uri: track.uri,
+    name: track.name,
+    artist: track.artist,
+    albumArt: track.albumArt,
+    durationMs: track.durationMs,
+    explicit: Boolean(track.explicit),
+    addedBy: { id: 'external', name: 'Playing on Spotify' },
+    addedAt: Date.now(),
+    round: 0,
+    votes: new Map(),
+    netVotes: 0,
+  };
+}
+
+/**
  * Moves a track the group voted out onto the skipped list instead of just
  * discarding it - a democratic "no" isn't necessarily forever, someone
  * might still want it back later. Votes are stripped since a re-add starts
