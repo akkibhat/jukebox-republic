@@ -5,10 +5,18 @@
 // endpoint, this engine explicitly commands "play track X now" each time a
 // track needs to start, on a timer that watches the current track's
 // progress and advances when it's about to end.
-import { getPlaybackState, getAvailableDevices, playTrack } from './spotifyApi.js';
+import { getPlaybackState, getAvailableDevices, getPlaylistTracks, playTrack } from './spotifyApi.js';
 import { ensureFreshToken } from './spotifyAuth.js';
 import { sortQueue } from './queueFairness.js';
-import { addToSkippedSongs, addToPlayHistory, makeFallbackNowPlaying, makeExternalNowPlaying } from './sessionStore.js';
+import { otherSeedPlaylist } from './autopilotMix.js';
+import {
+  addToSkippedSongs,
+  addToPlayHistory,
+  makeFallbackNowPlaying,
+  makeExternalNowPlaying,
+  removeFromFallbackTracks,
+  moveFallbackTrackToEnd,
+} from './sessionStore.js';
 import { broadcastState } from './broadcast.js';
 
 const POLL_INTERVAL_MS = 4000;
@@ -87,12 +95,22 @@ async function pollAndAdvance(session, io) {
 async function tryStartNext(session, io) {
   const [next, ...rest] = sortQueue(session.queue);
   const usingFallback = !next;
+
+  const accessToken = await ensureFreshToken(session);
+
+  if (usingFallback && session.fallbackTracks.length === 0) {
+    // The chosen seed playlist ran dry - top up from the other hardcoded
+    // one before giving up, rather than going silent for the rest of the
+    // trip. Needs accessToken, which is why this check happens after
+    // fetching it above instead of staying inside nextFallbackTrack().
+    await topUpAutopilotMix(session, accessToken);
+  }
+
   const fallbackTrack = usingFallback ? nextFallbackTrack(session) : null;
   const trackToPlay = next || fallbackTrack;
 
   if (!trackToPlay) return false;
 
-  const accessToken = await ensureFreshToken(session);
   const deviceId = await resolveTargetDevice(accessToken);
 
   if (!deviceId) {
@@ -108,17 +126,19 @@ async function tryStartNext(session, io) {
   try {
     await playTrack(accessToken, trackToPlay.uri, deviceId);
   } catch (err) {
-    // Spotify refused to start this particular track (region lock, a
-    // restriction on the device, a transient API error...). Previously
-    // this would just throw, get swallowed by the poll loop's catch, and
-    // leave the same broken track stuck at the front of the queue forever
-    // - every 4s poll would retry it and fail the same way. Instead, drop
-    // it (or move the Autopilot Mix's cursor past it) and let the very
-    // next poll tick try whatever comes after it.
+    // Spotify refused to start this particular track. Previously this
+    // would just throw, get swallowed by the poll loop's catch, and leave
+    // the same broken track stuck at the front of the queue forever -
+    // every 4s poll would retry it and fail the same way. A queued song
+    // gets dropped (someone can always re-add it), but an Autopilot Mix
+    // pick moves to the back of the line instead of being discarded - the
+    // failure might just be a network blip rather than something wrong
+    // with that specific track, so it's worth retrying once everything
+    // else has had a turn.
     console.error(`[playback] session ${session.roomCode} could not start "${trackToPlay.name}":`, err.message);
     session.playbackBlockedReason = `Spotify wouldn't start "${trackToPlay.name}" - trying the next song.`;
     if (usingFallback) {
-      advanceFallbackIndex(session);
+      moveFallbackTrackToEnd(session, trackToPlay.uri);
     } else {
       session.queue = rest;
     }
@@ -129,20 +149,41 @@ async function tryStartNext(session, io) {
   session.playbackBlockedReason = null;
   session.nowPlaying = usingFallback ? makeFallbackNowPlaying(trackToPlay) : trackToPlay;
   session.queue = rest;
-  if (usingFallback) advanceFallbackIndex(session);
+  // Once a track plays via the Autopilot Mix, it's used - it shouldn't
+  // cycle back around later, and it also stops showing up in the "Add to
+  // queue" preview list (there'd be nothing left to add, it's playing).
+  if (usingFallback) removeFromFallbackTracks(session, trackToPlay.uri);
   await broadcastState(io, session);
   return true;
 }
 
-/** The Autopilot Mix cycles in order (not randomly) so it's predictable, looping back to the start once it runs through. */
+/** Autopilot Mix tracks are taken in order (not randomly) so it's predictable, and each one is used at most once per trip. */
 function nextFallbackTrack(session) {
-  if (session.fallbackTracks.length === 0) return null;
-  return session.fallbackTracks[session.fallbackIndex % session.fallbackTracks.length];
+  return session.fallbackTracks[0] || null;
 }
 
-function advanceFallbackIndex(session) {
-  if (session.fallbackTracks.length === 0) return;
-  session.fallbackIndex = (session.fallbackIndex + 1) % session.fallbackTracks.length;
+/**
+ * Pulls in the second hardcoded seed playlist once the first one's fully
+ * drained. Only ever attempted once per trip (usedBothSeedPlaylists),
+ * whether it succeeds or fails - if it fails, the poll loop would
+ * otherwise hit this same failing fetch every 4s for the rest of the trip.
+ */
+async function topUpAutopilotMix(session, accessToken) {
+  if (session.usedBothSeedPlaylists) return;
+  session.usedBothSeedPlaylists = true;
+
+  const next = otherSeedPlaylist(session.seedPlaylistId);
+  if (!next) return;
+
+  try {
+    const tracks = await getPlaylistTracks(accessToken, next.id);
+    session.fallbackTracks.push(...tracks);
+    console.log(
+      `[playback] session ${session.roomCode} topped up Autopilot Mix from "${next.label}" (${tracks.length} tracks)`
+    );
+  } catch (err) {
+    console.error(`[playback] session ${session.roomCode} failed to top up Autopilot Mix:`, err.message);
+  }
 }
 
 /**

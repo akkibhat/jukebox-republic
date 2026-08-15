@@ -10,6 +10,7 @@ import {
   makeQueueItem,
   addToSkippedSongs,
   removeFromSkippedSongs,
+  removeFromFallbackTracks,
   endSession,
 } from './sessionStore.js';
 import { nextRoundForGuest, applyVote } from './queueFairness.js';
@@ -56,6 +57,7 @@ export function registerSocketHandlers(io) {
       const item = makeQueueItem({ track, guest, round });
       session.queue.push(item);
       removeFromSkippedSongs(session, track.uri); // re-adding a skipped song takes it off that list
+      removeFromFallbackTracks(session, track.uri); // promoted to the real queue - out of the Autopilot Mix pool
 
       ack?.({ ok: true });
       await broadcastState(io, session);

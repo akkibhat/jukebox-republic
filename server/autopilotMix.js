@@ -9,3 +9,8 @@ const SEED_PLAYLISTS = [
 export function pickSeedPlaylist() {
   return SEED_PLAYLISTS[Math.floor(Math.random() * SEED_PLAYLISTS.length)];
 }
+
+/** The playlist NOT already used this trip - called once the first one runs dry, to top up instead of going silent. */
+export function otherSeedPlaylist(usedId) {
+  return SEED_PLAYLISTS.find((p) => p.id !== usedId) || null;
+}

@@ -39,8 +39,9 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
     nowPlaying: null, // { uri, name, artist, albumArt, durationMs, startedAt, votes, netVotes }
     skippedSongs: [], // tracks the group voted out - see addToSkippedSongs below
     playHistory: [], // rolling "recently played" log - see addToPlayHistory below
-    fallbackTracks: [], // the Autopilot Mix - seeded once at login from autopilotMix.js, see routes/auth.js
-    fallbackIndex: 0, // cycles through fallbackTracks in order rather than repeating the first one forever
+    fallbackTracks: [], // the Autopilot Mix - seeded once at login from autopilotMix.js; each track is removed once it's used (played or promoted to the queue)
+    seedPlaylistId: null, // which of the two hardcoded playlists it was seeded from - set right after seeding, see routes/auth.js
+    usedBothSeedPlaylists: false, // flips true once playbackEngine.js has topped up from the second playlist, so it only tries once
     playbackBlockedReason: null, // set by playbackEngine.js when Spotify can't see any device to play on
     isPlaying: null, // true/false once known from Spotify; null until the first poll or host action reports it
   };
@@ -185,6 +186,30 @@ export function addToSkippedSongs(session, item) {
 /** Called when a skipped track gets re-added to the queue, so it stops showing up in both places at once. */
 export function removeFromSkippedSongs(session, uri) {
   session.skippedSongs = session.skippedSongs.filter((s) => s.uri !== uri);
+}
+
+/**
+ * Called whenever a track leaves the Autopilot Mix pool for good - promoted
+ * into the real queue (by anyone, from the "Add to queue" button or by
+ * searching for the same song directly) or played by the autopilot cycle
+ * itself. Each track is used at most once per trip rather than looping
+ * back around.
+ */
+export function removeFromFallbackTracks(session, uri) {
+  session.fallbackTracks = session.fallbackTracks.filter((t) => t.uri !== uri);
+}
+
+/**
+ * A failed play attempt (region lock, a transient API error, a network
+ * blip) doesn't necessarily mean the track itself is bad, so unlike a
+ * successful play it isn't dropped - just sent to the back of the line to
+ * retry later, after everything else has had a turn.
+ */
+export function moveFallbackTrackToEnd(session, uri) {
+  const index = session.fallbackTracks.findIndex((t) => t.uri === uri);
+  if (index === -1) return;
+  const [track] = session.fallbackTracks.splice(index, 1);
+  session.fallbackTracks.push(track);
 }
 
 const PLAY_HISTORY_LIMIT = 25;

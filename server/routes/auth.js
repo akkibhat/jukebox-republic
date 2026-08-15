@@ -48,6 +48,7 @@ authRouter.get('/callback', async (req, res) => {
     // playlist) - the trip still starts fine, just without an Autopilot
     // Mix ready until someone adds a real song.
     const seedPlaylist = pickSeedPlaylist();
+    session.seedPlaylistId = seedPlaylist.id;
     try {
       session.fallbackTracks = await getPlaylistTracks(tokens.accessToken, seedPlaylist.id);
       console.log(
