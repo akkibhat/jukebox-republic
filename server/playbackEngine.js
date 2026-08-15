@@ -1,4 +1,4 @@
-// Drives what actually plays. cartunes treats our own fairly-ordered queue
+// Drives what actually plays. Jukebox Republic treats our own fairly-ordered queue
 // as the source of truth - not Spotify's built-in queue, which can't be
 // reordered or have items pulled out of the middle, both of which the
 // voting system needs to do. So instead of using Spotify's "add to queue"
@@ -26,7 +26,7 @@ const POLL_INTERVAL_MS = 4000;
 const END_OF_TRACK_LEAD_MS = 2500;
 // A queued track gets this many in-place retries before it's pushed behind
 // anything that hasn't failed yet, and this many total attempts before
-// cartunes gives up on it entirely - see pickNextQueueItem.
+// Jukebox Republic gives up on it entirely - see pickNextQueueItem.
 const RETRY_DEMOTION_THRESHOLD = 2;
 const MAX_TRANSIENT_FAILURES = 5;
 
@@ -56,7 +56,7 @@ async function pollAndAdvance(session, io) {
 
   // Picked up here so the host controls can show "Playing"/"Paused" and
   // grey out whichever button doesn't apply, even when the host pauses or
-  // resumes from their own Spotify app instead of cartunes' buttons. Only
+  // resumes from their own Spotify app instead of Jukebox Republic's buttons. Only
   // broadcasts when it actually changes, so an unremarkable poll tick
   // doesn't re-send state to everyone for no reason.
   const isPlaying = state?.isPlaying ?? null;
@@ -75,7 +75,7 @@ async function pollAndAdvance(session, io) {
   if (!state) return; // host's device went away (asleep, disconnected) - just wait for it to come back
 
   if (state.track.uri !== session.nowPlaying.uri) {
-    // Something's playing that cartunes didn't pick - most likely the host
+    // Something's playing that Jukebox Republic didn't pick - most likely the host
     // took manual control (e.g. during a dead zone) rather than a glitch.
     // Rather than yanking it away mid-song, adopt it as the thing we're
     // watching. It's still fully votable, and the very next poll tick's

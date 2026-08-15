@@ -183,7 +183,7 @@ export function registerSocketHandlers(io) {
         await pausePlayback(accessToken);
       } catch (err) {
         // Not fatal - the trip ends either way. This is just a courtesy so
-        // the car doesn't keep playing after everyone's done with cartunes;
+        // the car doesn't keep playing after everyone's done with Jukebox Republic;
         // if the host's phone is already asleep or offline, there's no
         // device to pause anyway.
         console.error(`[sockets] session:end could not pause playback for ${session.roomCode}:`, err.message);

@@ -269,7 +269,17 @@ function renderFatalError(message) {
 function renderTripEnded() {
   document.body.innerHTML = `
     <main class="screen screen-center">
-      <h1 class="logo">cartunes</h1>
+      <svg class="logo-mark" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="3"/>
+        <circle cx="50" cy="50" r="37" fill="none" stroke="currentColor" stroke-width="1"/>
+        <rect x="18" y="39" width="8" height="22" rx="2" fill="currentColor"/>
+        <rect x="32" y="31" width="8" height="38" rx="2" fill="currentColor"/>
+        <rect x="46" y="23" width="8" height="54" rx="2" fill="currentColor"/>
+        <rect x="60" y="31" width="8" height="38" rx="2" fill="currentColor"/>
+        <rect x="74" y="39" width="8" height="22" rx="2" fill="currentColor"/>
+      </svg>
+      <h1 class="logo">Jukebox Republic</h1>
+      <div class="logo-rule"></div>
       <p>This trip has ended. Thanks for riding along.</p>
       <a class="button button-secondary" href="/">Back home</a>
     </main>

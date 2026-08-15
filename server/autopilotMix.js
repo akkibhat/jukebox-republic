@@ -1,6 +1,6 @@
 // The Autopilot Mix is what plays when the real queue runs dry - seeded
 // once per trip from one of these hardcoded playlists, picked at random.
-// If it runs dry mid-trip, cartunes tops up from another one not yet used
+// If it runs dry mid-trip, Jukebox Republic tops up from another one not yet used
 // (see nextUnusedSeedPlaylist), so a long drive isn't limited to a single
 // playlist's worth of songs.
 const SEED_PLAYLISTS = [

@@ -3,14 +3,14 @@
    background so it doesn't blind the driver or the person riding shotgun. */
 
 :root {
-  --bg: #0f0f14;
-  --surface: #1b1b24;
-  --surface-raised: #24242f;
-  --border: #33333f;
-  --text: #f2f2f5;
-  --text-dim: #9a9aa8;
-  --accent: #1ed760; /* Spotify green, since this app is nothing without Spotify */
-  --accent-dim: #16994a;
+  --bg: #16130f;
+  --surface: #201b13;
+  --surface-raised: #2b2418;
+  --border: #3d3524;
+  --text: #f2ead9;
+  --text-dim: #b8ab8e;
+  --accent: #c9a24b; /* seal gold - kept distinct from Spotify's own green so the app doesn't read as Spotify-branded */
+  --accent-dim: #a3822f;
   --danger: #ff5470;
   --radius: 14px;
   /* The bottom of the screen stacks two fixed bars - tab nav at the very
@@ -51,14 +51,31 @@ body {
   padding-bottom: 24px;
 }
 
+.logo-mark {
+  width: 60px;
+  height: 60px;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+
 .logo {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
   font-size: 2.5rem;
   margin: 0;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.01em;
+}
+
+.logo-rule {
+  width: 46px;
+  height: 2px;
+  background: var(--accent);
+  margin: 10px auto;
 }
 
 .tagline {
   color: var(--text-dim);
+  font-style: italic;
   margin-top: 4px;
   margin-bottom: 32px;
 }

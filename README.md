@@ -1,6 +1,6 @@
-# cartunes
+# Jukebox Republic
 
-Musical democracy for the car. One person (the driver) hosts a trip through
+The people's queue. One person (the driver) hosts a trip through
 their Spotify account; everyone else in the car joins from their own phone,
 searches for songs, and votes on what plays next. Nobody can flood the queue
 with their own taste, and the group can vote a bad pick off the road.

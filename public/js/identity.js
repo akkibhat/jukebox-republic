@@ -4,8 +4,8 @@
 // "round" counter on the server stays tied to *you* specifically rather
 // than resetting every time you reload.
 
-const ID_KEY = 'cartunes_guest_id';
-const NAME_KEY = 'cartunes_guest_name';
+const ID_KEY = 'jukebox_republic_guest_id';
+const NAME_KEY = 'jukebox_republic_guest_name';
 
 export function getOrCreateGuestId() {
   let id = localStorage.getItem(ID_KEY);

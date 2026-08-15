@@ -25,5 +25,5 @@ app.use('/api', apiRouter);
 registerSocketHandlers(io);
 
 httpServer.listen(config.port, () => {
-  console.log(`cartunes listening on ${config.publicBaseUrl} (port ${config.port})`);
+  console.log(`Jukebox Republic listening on ${config.publicBaseUrl} (port ${config.port})`);
 });

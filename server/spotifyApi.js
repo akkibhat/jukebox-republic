@@ -1,4 +1,4 @@
-// Thin wrapper around the bits of the Spotify Web API cartunes actually
+// Thin wrapper around the bits of the Spotify Web API Jukebox Republic actually
 // needs: searching the catalog and driving playback on the host's device.
 // Every function takes an accessToken rather than a session, so this module
 // stays decoupled from how sessions/tokens are managed.

@@ -2,7 +2,7 @@
 // party: one host Spotify account driving playback, a room code guests join
 // with, and the shared queue. No database - sessions are meant to live for
 // the length of a drive and it's fine for them to vanish when the server
-// restarts. If cartunes ever needs to survive server restarts or run on
+// restarts. If Jukebox Republic ever needs to survive server restarts or run on
 // multiple instances, this is the module to swap for a Redis-backed one;
 // nothing outside this file knows or cares how sessions are stored.
 
@@ -130,7 +130,7 @@ export function detectDuplicate(session, uri) {
 }
 
 /**
- * A track cartunes picked from the Autopilot Mix rather than the real
+ * A track Jukebox Republic picked from the Autopilot Mix rather than the real
  * queue, shaped exactly like a normal queue item so it can be voted on,
  * skipped, and land in history the same way anything else does. `addedBy`
  * is a synthetic id ('fallback') that can never match a real guestId, so
@@ -155,7 +155,7 @@ export function makeFallbackNowPlaying(track) {
 }
 
 /**
- * A track cartunes is watching but didn't choose - someone (almost always
+ * A track Jukebox Republic is watching but didn't choose - someone (almost always
  * the host) started it directly in Spotify, most likely taking manual
  * control during a dead zone. Shaped like any other now-playing item so
  * the existing "is it about to finish" progress check in playbackEngine.js

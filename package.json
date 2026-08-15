@@ -1,7 +1,7 @@
 {
-  "name": "cartunes",
+  "name": "jukebox-republic",
   "version": "0.1.0",
-  "description": "Musical democracy for road trips - a shared, votable Spotify queue for the car.",
+  "description": "The people's queue - a shared, votable Spotify queue for the car.",
   "type": "module",
   "main": "server/index.js",
   "scripts": {
