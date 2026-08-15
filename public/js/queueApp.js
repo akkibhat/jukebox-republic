@@ -118,7 +118,26 @@ function renderState(state) {
   renderQueue(state.queue);
   renderReaddableList('autopilot-list', state.fallbackTracks, 'Add to queue', 'Nothing in the Autopilot Mix right now.');
   renderReaddableList('skipped-list', state.skippedSongs, 'Re-add', 'Nothing skipped yet.');
-  renderReaddableList('history-list', state.playHistory, 'Re-add', 'Nothing played yet.');
+  renderReaddableList('history-list', state.playHistory, 'Re-add', 'Nothing played yet.', {
+    golden: findGoldenRecord(state.playHistory),
+  });
+}
+
+/**
+ * The current holder of the "golden record" - the session's most net-
+ * upvoted played song so far. History arrives newest-first and ties go to
+ * whichever played first, so a later array entry (an older play) takes an
+ * equal score - hence >=. Nothing qualifies until something actually goes
+ * net-positive; a badge for "least disliked at zero" would be no honor.
+ */
+function findGoldenRecord(history) {
+  let golden = null;
+  for (const entry of history || []) {
+    if (entry.netVotes > 0 && entry.netVotes >= (golden?.netVotes ?? 0)) {
+      golden = entry;
+    }
+  }
+  return golden;
 }
 
 function renderNowPlaying(track, playbackBlockedReason, isPlaying, progressMs) {
@@ -230,7 +249,7 @@ function renderQueue(queue) {
  * in place of the rows instead of disappearing - the tab itself is always
  * reachable from the tab bar regardless of what's in it.
  */
-function renderReaddableList(listId, tracks, buttonLabel, emptyMessage) {
+function renderReaddableList(listId, tracks, buttonLabel, emptyMessage, { golden = null } = {}) {
   const list = document.getElementById(listId);
   if (!list) return;
 
@@ -243,11 +262,14 @@ function renderReaddableList(listId, tracks, buttonLabel, emptyMessage) {
 
   list.innerHTML = readdCaches[listId]
     .map(
+      // `golden` is compared by identity, not id - the same song re-added
+      // and re-played gets its own separate history entry, and only the
+      // specific play that earned the votes should wear the medal.
       (track, index) => `
         <div class="queue-item skipped-item">
           <div class="art" style="background-image: url('${track.albumArt || ''}')"></div>
           <div class="track-info">
-            <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}</div>
+            <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}${track === golden ? goldenBadgeHtml(track) : ''}</div>
             <div class="track-artist">${escapeHtml(track.artist)}</div>
           </div>
           <button class="button button-secondary readd-button" data-list="${listId}" data-index="${index}">${buttonLabel}</button>
@@ -255,6 +277,11 @@ function renderReaddableList(listId, tracks, buttonLabel, emptyMessage) {
       `
     )
     .join('');
+}
+
+/** The session's most-upvoted played song wears this in the History tab. */
+function goldenBadgeHtml(track) {
+  return `<span class="golden-badge" title="Golden record - the session's most upvoted song (+${track.netVotes})">&#129351;</span>`;
 }
 
 function voteButtonsHtml(track) {
@@ -333,7 +360,7 @@ function renderFatalError(message) {
   document.body.innerHTML = `<main class="screen screen-center"><p>${escapeHtml(message)}</p><a class="button button-secondary" href="/">Back home</a></main>`;
 }
 
-function renderSessionEnded() {
+function renderSessionEnded(recap) {
   document.body.innerHTML = `
     <main class="screen screen-center">
       <svg class="logo-mark" viewBox="0 0 100 100">
@@ -348,8 +375,72 @@ function renderSessionEnded() {
       <h1 class="logo">Jukebox Republic</h1>
       <div class="logo-rule"></div>
       <p>The jukebox has stopped. Thanks for listening.</p>
+      ${recapHtml(recap)}
       <a class="button button-secondary" href="/">Back home</a>
     </main>
+  `;
+}
+
+/**
+ * The end-of-session "election results" card, built from the recap the
+ * server sends with session:ended. Falls back to nothing (rather than an
+ * empty card) when the session ended before anything played - the plain
+ * goodbye line above carries those.
+ */
+function recapHtml(recap) {
+  if (!recap || !recap.totalPlayed) return '';
+
+  const rows = [];
+
+  if (recap.goldenRecord) {
+    const g = recap.goldenRecord;
+    rows.push(
+      recapRowHtml(
+        '&#129351;',
+        'Golden record',
+        `${escapeHtml(g.name)} — ${escapeHtml(g.artist)}`,
+        `+${g.netVotes} votes · added by ${escapeHtml(g.addedBy.name)}`
+      )
+    );
+  }
+  if (recap.peoplesChampion) {
+    const c = recap.peoplesChampion;
+    rows.push(
+      recapRowHtml('&#128081;', "The people's champion", escapeHtml(c.name), `+${c.totalNetVotes} net votes across their picks`)
+    );
+  }
+  if (recap.topContributor) {
+    const t = recap.topContributor;
+    rows.push(
+      recapRowHtml('&#127925;', 'Top contributor', escapeHtml(t.name), `${t.played} of the songs that played`)
+    );
+  }
+  if (recap.impeached) {
+    const i = recap.impeached;
+    rows.push(
+      recapRowHtml('&#128078;', 'Impeached', escapeHtml(i.name), `${i.votedOut} pick${i.votedOut === 1 ? '' : 's'} voted out by the group`)
+    );
+  }
+
+  return `
+    <div class="card recap-card">
+      <h2 class="section-title">Election results</h2>
+      ${rows.join('')}
+      <div class="recap-footer">${recap.totalPlayed} song${recap.totalPlayed === 1 ? '' : 's'} played · ${recap.guestCount} citizen${recap.guestCount === 1 ? '' : 's'}</div>
+    </div>
+  `;
+}
+
+function recapRowHtml(icon, label, main, sub) {
+  return `
+    <div class="recap-row">
+      <div class="recap-icon">${icon}</div>
+      <div class="recap-info">
+        <div class="recap-label">${label}</div>
+        <div class="recap-main">${main}</div>
+        ${sub ? `<div class="recap-sub">${sub}</div>` : ''}
+      </div>
+    </div>
   `;
 }
 

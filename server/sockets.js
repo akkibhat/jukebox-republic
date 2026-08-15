@@ -15,6 +15,7 @@ import {
   endSession,
 } from './sessionStore.js';
 import { nextRoundForGuest, applyVote } from './queueFairness.js';
+import { buildSessionRecap } from './sessionRecap.js';
 import { broadcastState, roomName } from './broadcast.js';
 import { startPlaybackLoop, stopPlaybackLoop, skipCurrentTrack } from './playbackEngine.js';
 import { pausePlayback, resumePlayback } from './spotifyApi.js';
@@ -189,7 +190,10 @@ export function registerSocketHandlers(io) {
         console.error(`[sockets] session:end could not pause playback for ${session.roomCode}:`, err.message);
       }
 
-      io.in(roomName(session.id)).emit('session:ended');
+      // The recap has to be built (and sent) before endSession wipes the
+      // state it's computed from - clients render it after the fact from
+      // this payload alone.
+      io.in(roomName(session.id)).emit('session:ended', buildSessionRecap(session));
       stopPlaybackLoop(session.id);
       endSession(session.id);
       ack?.({ ok: true });

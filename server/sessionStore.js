@@ -256,8 +256,18 @@ const PLAY_HISTORY_LIMIT = 25;
  * voted-out track re-adding itself doesn't erase that it was here once,
  * and re-adding *from* history doesn't remove the history entry either.
  * Capped so a long session's history doesn't grow without bound.
+ *
+ * The vote tally is frozen into the entry at this moment - votes only
+ * accumulate while a track is queued or playing, so whatever it holds as
+ * it leaves now-playing is its final score. That's what the golden-record
+ * badge and the end-of-session election results are computed from.
  */
-export function addToPlayHistory(session, item) {
+export function addToPlayHistory(session, item, { votedOut = false } = {}) {
+  let downvotes = 0;
+  for (const vote of item.votes?.values() ?? []) {
+    if (vote === 'down') downvotes += 1;
+  }
+
   session.playHistory.unshift({
     id: item.id,
     uri: item.uri,
@@ -267,6 +277,9 @@ export function addToPlayHistory(session, item) {
     durationMs: item.durationMs,
     explicit: item.explicit,
     addedBy: item.addedBy,
+    netVotes: item.netVotes ?? 0,
+    downvotes,
+    votedOut, // true only when the group's majority vote removed it - a host skip or natural finish isn't a rejection
     playedAt: Date.now(),
   });
   if (session.playHistory.length > PLAY_HISTORY_LIMIT) {

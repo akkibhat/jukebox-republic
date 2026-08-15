@@ -277,7 +277,7 @@ async function resolveTargetDevice(accessToken) {
  */
 export async function advanceToNext(session, io, { votedOut = false } = {}) {
   if (session.nowPlaying) {
-    addToPlayHistory(session, session.nowPlaying);
+    addToPlayHistory(session, session.nowPlaying, { votedOut });
     if (votedOut) {
       addToSkippedSongs(session, session.nowPlaying);
     }

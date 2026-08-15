@@ -245,6 +245,68 @@ input {
   margin-bottom: 2px;
 }
 
+/* --- Golden record badge + end-of-session election results --- */
+
+.golden-badge {
+  margin-left: 6px;
+  font-size: 0.85rem;
+}
+
+.recap-card {
+  width: 100%;
+  margin-bottom: 16px;
+  gap: 0;
+}
+
+.recap-card .section-title {
+  margin: 0 0 4px;
+}
+
+.recap-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.recap-row:last-of-type {
+  border-bottom: none;
+}
+
+.recap-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}
+
+.recap-info {
+  min-width: 0;
+}
+
+.recap-label {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.recap-main {
+  font-weight: 600;
+}
+
+.recap-sub {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.recap-footer {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  text-align: center;
+  margin-top: 10px;
+}
+
 .host-controls {
   display: flex;
   gap: 8px;
