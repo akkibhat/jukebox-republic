@@ -49,6 +49,7 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
 
         wireSearch(sessionId, socket);
         wireClicks(socket);
+        wireTabs();
       })
   );
 }
@@ -90,9 +91,9 @@ function renderState(state) {
 
   renderNowPlaying(state.nowPlaying, state.playbackBlockedReason, state.isPlaying);
   renderQueue(state.queue);
-  renderReaddableList('autopilot-section', 'autopilot-list', state.fallbackTracks, 'Add to queue');
-  renderReaddableList('skipped-section', 'skipped-list', state.skippedSongs);
-  renderReaddableList('history-section', 'history-list', state.playHistory);
+  renderReaddableList('autopilot-list', state.fallbackTracks, 'Add to queue', 'Nothing in the Autopilot Mix right now.');
+  renderReaddableList('skipped-list', state.skippedSongs, 'Re-add', 'Nothing skipped yet.');
+  renderReaddableList('history-list', state.playHistory, 'Re-add', 'Nothing played yet.');
 }
 
 function renderNowPlaying(track, playbackBlockedReason, isPlaying) {
@@ -123,56 +124,56 @@ function renderNowPlaying(track, playbackBlockedReason, isPlaying) {
   `;
 }
 
+/** Renders into both #queue-list-home (Home tab) and #queue-list-tab (Queue tab) - same data, same markup, two places to see it. */
 function renderQueue(queue) {
-  const list = document.getElementById('queue-list');
-  if (!list) return;
+  const html =
+    queue.length === 0
+      ? `<p class="empty-state">Queue's empty. Search below to add the next song.</p>`
+      : queue
+          .map(
+            (track) => `
+              <div class="queue-item" data-item-id="${track.id}">
+                <div class="art" style="background-image: url('${track.albumArt || ''}')"></div>
+                <div class="track-info">
+                  <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}</div>
+                  <div class="track-artist">${escapeHtml(track.artist)}</div>
+                  <div class="added-by">${escapeHtml(track.addedBy.name)}</div>
+                  ${skipProgressHtml(track)}
+                  ${duplicateBadgeHtml(track)}
+                </div>
+                ${voteButtonsHtml(track)}
+                ${track.addedBy.id === myGuestId || track.duplicateReason ? removeButtonHtml() : ''}
+              </div>
+            `
+          )
+          .join('');
 
-  if (queue.length === 0) {
-    list.innerHTML = `<p class="empty-state">Queue's empty. Search below to add the next song.</p>`;
-    return;
-  }
-
-  list.innerHTML = queue
-    .map(
-      (track) => `
-        <div class="queue-item" data-item-id="${track.id}">
-          <div class="art" style="background-image: url('${track.albumArt || ''}')"></div>
-          <div class="track-info">
-            <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}</div>
-            <div class="track-artist">${escapeHtml(track.artist)}</div>
-            <div class="added-by">${escapeHtml(track.addedBy.name)}</div>
-            ${skipProgressHtml(track)}
-            ${duplicateBadgeHtml(track)}
-          </div>
-          ${voteButtonsHtml(track)}
-          ${track.addedBy.id === myGuestId || track.duplicateReason ? removeButtonHtml() : ''}
-        </div>
-      `
-    )
-    .join('');
+  const homeList = document.getElementById('queue-list-home');
+  const tabList = document.getElementById('queue-list-tab');
+  if (homeList) homeList.innerHTML = html;
+  if (tabList) tabList.innerHTML = html;
 }
 
 /**
  * Renders a read-only track list where every row can be sent into the main
  * queue with one tap - used for the Autopilot Mix preview, the skipped-
- * songs list, and play history, all shaped identically on the wire. The
- * whole section hides itself when empty, rather than showing an empty
- * heading with nothing under it.
+ * songs list, and play history, all shaped identically on the wire. Each
+ * of these now lives in its own dedicated tab (rather than a section that
+ * used to hide itself when empty), so an empty list shows a short message
+ * in place of the rows instead of disappearing - the tab itself is always
+ * reachable from the tab bar regardless of what's in it.
  */
-function renderReaddableList(sectionId, listId, tracks, buttonLabel = 'Re-add') {
-  const section = document.getElementById(sectionId);
+function renderReaddableList(listId, tracks, buttonLabel, emptyMessage) {
   const list = document.getElementById(listId);
-  if (!section || !list) return;
+  if (!list) return;
 
   readdCaches[listId] = tracks || [];
 
   if (readdCaches[listId].length === 0) {
-    section.style.display = 'none';
-    list.innerHTML = '';
+    list.innerHTML = `<p class="empty-state">${escapeHtml(emptyMessage)}</p>`;
     return;
   }
 
-  section.style.display = 'block';
   list.innerHTML = readdCaches[listId]
     .map(
       (track, index) => `
@@ -326,6 +327,25 @@ function wireClicks(socket) {
         if (response?.error) showToast(response.error);
       });
     }
+  });
+}
+
+/** Bottom tab nav: swaps which .tab-panel is visible and highlights the active button. Pure UI state, no server round-trip. */
+function wireTabs() {
+  const tabBar = document.getElementById('tab-bar');
+  if (!tabBar) return;
+
+  tabBar.addEventListener('click', (event) => {
+    const button = event.target.closest('.tab-button');
+    if (!button) return;
+
+    const target = button.dataset.tab;
+    document.querySelectorAll('.tab-panel').forEach((panel) => {
+      panel.classList.toggle('active', panel.id === `tab-${target}`);
+    });
+    document.querySelectorAll('.tab-button').forEach((btn) => {
+      btn.classList.toggle('active', btn === button);
+    });
   });
 }
 

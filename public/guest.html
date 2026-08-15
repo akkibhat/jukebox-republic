@@ -8,25 +8,35 @@
 </head>
 <body>
   <main class="screen">
-    <div class="session-header" id="session-header"></div>
+    <div class="tab-panel active" id="tab-home">
+      <div class="session-header" id="session-header"></div>
 
-    <h2 class="section-title">Now playing</h2>
-    <div id="now-playing"></div>
+      <h2 class="section-title">Now playing</h2>
+      <div id="now-playing"></div>
 
-    <h2 class="section-title">Up next</h2>
-    <div class="queue-list" id="queue-list"></div>
+      <h2 class="section-title">Up next</h2>
+      <div class="queue-list" id="queue-list-home"></div>
+    </div>
 
-    <div id="autopilot-section" style="display: none;">
-      <h2 class="section-title">Autopilot Mix</h2>
+    <div class="tab-panel" id="tab-queue">
+      <h2 class="section-title">Queue</h2>
+      <div class="queue-list" id="queue-list-tab"></div>
+    </div>
+
+    <div class="tab-panel" id="tab-autopilot">
+      <p class="tab-blurb">
+        Plays automatically once the queue's empty, pulled from a mix of road-trip playlists.
+        Tap + to send any of these straight into the real queue.
+      </p>
       <div class="queue-list" id="autopilot-list"></div>
     </div>
 
-    <div id="skipped-section" style="display: none;">
+    <div class="tab-panel" id="tab-skipped">
       <h2 class="section-title">Skipped songs</h2>
       <div class="queue-list" id="skipped-list"></div>
     </div>
 
-    <div id="history-section" style="display: none;">
+    <div class="tab-panel" id="tab-history">
       <h2 class="section-title">Recently played</h2>
       <div class="queue-list" id="history-list"></div>
     </div>
@@ -36,6 +46,14 @@
   <div class="add-song-bar">
     <input id="search-input" type="text" placeholder="Search Spotify to add a song&hellip;" autocomplete="off" />
   </div>
+
+  <nav class="tab-bar" id="tab-bar">
+    <button class="tab-button active" data-tab="home" type="button"><span class="tab-icon">&#127968;</span>Home</button>
+    <button class="tab-button" data-tab="queue" type="button"><span class="tab-icon">&#127925;</span>Queue</button>
+    <button class="tab-button" data-tab="autopilot" type="button"><span class="tab-icon">&#10024;</span>Autopilot</button>
+    <button class="tab-button" data-tab="skipped" type="button"><span class="tab-icon">&#128078;</span>Skipped</button>
+    <button class="tab-button" data-tab="history" type="button"><span class="tab-icon">&#128339;</span>History</button>
+  </nav>
 
   <div class="name-prompt" id="name-prompt" style="display: none;">
     <form class="card" id="name-form">

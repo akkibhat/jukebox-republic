@@ -13,6 +13,11 @@
   --accent-dim: #16994a;
   --danger: #ff5470;
   --radius: 14px;
+  /* The bottom of the screen stacks two fixed bars - tab nav at the very
+     bottom, search above it - referenced from both bars themselves and
+     from .screen's padding so scrollable content never hides behind them. */
+  --tab-bar-height: 56px;
+  --search-bar-height: 62px;
 }
 
 * { box-sizing: border-box; }
@@ -29,8 +34,12 @@ body {
 .screen {
   max-width: 480px;
   margin: 0 auto;
-  padding: 24px 20px 96px; /* bottom padding clears the fixed add-song bar */
+  /* bottom padding clears both fixed bars (search + tab nav) stacked below */
+  padding: 24px 20px calc(var(--tab-bar-height) + var(--search-bar-height) + env(safe-area-inset-bottom) + 24px);
 }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
 
 .screen-center {
   min-height: 100vh;
@@ -309,29 +318,73 @@ input {
   line-height: 1;
 }
 
-/* --- Fixed "add a song" bar + search results --- */
+/* --- Fixed bottom stack: tab nav (bottom-most) -> search bar -> results --- */
+
+.tab-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 480px; /* same centering trick as .screen, so it lines up with the QR card on a wide viewport instead of stretching edge to edge */
+  margin: 0 auto;
+  z-index: 15;
+  display: flex;
+  height: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.tab-button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 6px 2px;
+}
+
+.tab-button .tab-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.tab-button.active {
+  color: var(--accent);
+}
 
 .add-song-bar {
   position: fixed;
-  bottom: 0;
   left: 0;
   right: 0;
+  bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+  max-width: 480px;
+  margin: 0 auto;
+  z-index: 12;
   background: var(--surface);
   border-top: 1px solid var(--border);
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  padding: 10px 16px;
 }
 
 .add-song-bar input {
-  max-width: 480px;
-  margin: 0 auto;
   display: block;
+  width: 100%;
 }
 
 .search-results {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 68px;
+  bottom: calc(var(--tab-bar-height) + var(--search-bar-height) + env(safe-area-inset-bottom));
+  max-width: 480px;
+  margin: 0 auto;
+  z-index: 11;
   max-height: 50vh;
   overflow-y: auto;
   background: var(--surface);
@@ -341,9 +394,14 @@ input {
 
 .search-results:empty { display: none; }
 
+.tab-blurb {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  margin: 20px 0 16px;
+}
+
 .search-result {
-  max-width: 480px;
-  margin: 0 auto;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -368,6 +426,7 @@ input {
 .name-prompt {
   position: fixed;
   inset: 0;
+  z-index: 30; /* above the tab bar and search bar - naming yourself gates using either */
   background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
@@ -380,7 +439,8 @@ input {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 140px; /* clears the fixed search bar + results panel */
+  /* clears the tab bar + search bar + results panel stacked below it */
+  bottom: calc(var(--tab-bar-height) + var(--search-bar-height) + env(safe-area-inset-bottom) + 76px);
   transform: translateX(-50%) translateY(10px);
   background: var(--surface-raised);
   border: 1px solid var(--border);
