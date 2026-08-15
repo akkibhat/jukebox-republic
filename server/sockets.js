@@ -178,6 +178,17 @@ export function registerSocketHandlers(io) {
       const session = requireHost(socket, ack);
       if (!session) return;
 
+      try {
+        const accessToken = await ensureFreshToken(session);
+        await pausePlayback(accessToken);
+      } catch (err) {
+        // Not fatal - the trip ends either way. This is just a courtesy so
+        // the car doesn't keep playing after everyone's done with cartunes;
+        // if the host's phone is already asleep or offline, there's no
+        // device to pause anyway.
+        console.error(`[sockets] session:end could not pause playback for ${session.roomCode}:`, err.message);
+      }
+
       io.in(roomName(session.id)).emit('session:ended');
       stopPlaybackLoop(session.id);
       endSession(session.id);
