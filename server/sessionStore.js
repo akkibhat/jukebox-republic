@@ -44,6 +44,7 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
     usedSeedPlaylistIds: [], // hardcoded playlist ids already pulled from this session - set right after seeding (routes/auth.js), grows as playbackEngine.js tops up
     playbackBlockedReason: null, // set by playbackEngine.js when Spotify can't see any device to play on
     isPlaying: null, // true/false once known from Spotify; null until the first poll or host action reports it
+    progressMs: null, // how far into the current track playback is, per the last poll - clients interpolate between polls for a smooth progress bar
   };
 
   sessions.set(id, session);

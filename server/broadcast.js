@@ -39,6 +39,7 @@ export async function broadcastState(io, session) {
       guestNames: connectedGuestNames(session),
       playbackBlockedReason: session.playbackBlockedReason,
       isPlaying: session.isPlaying,
+      progressMs: session.progressMs,
     });
   }
 }

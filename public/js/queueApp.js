@@ -19,6 +19,14 @@ let myGuestId = null;
 // results.
 const readdCaches = { 'autopilot-list': [], 'skipped-list': [], 'history-list': [] };
 
+// The last known playback position, anchored to *this device's* clock at
+// the moment the state broadcast arrived. The server re-sends the real
+// number every poll tick (~4s); between ticks a small timer walks the bar
+// forward from this anchor, so it moves smoothly instead of jumping every
+// few seconds. Using the client's own receive-time (rather than a server
+// timestamp) sidesteps clock skew between phones entirely.
+let progressAnchor = null;
+
 /**
  * Joins the session and wires up the whole real-time UI. Returns a promise
  * that resolves with the connected socket once the join succeeds, so a
@@ -50,6 +58,11 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
         wireSearch(sessionId, socket);
         wireClicks(socket);
         wireTabs();
+
+        // Walks the progress bar forward between server updates. Updates
+        // two elements in place rather than re-rendering the card, so it
+        // never interferes with buttons mid-tap.
+        setInterval(tickProgressBar, 500);
       })
   );
 }
@@ -89,14 +102,26 @@ function renderState(state) {
     guestNamesEl.textContent = state.guestNames && state.guestNames.length ? state.guestNames.join(', ') : '';
   }
 
-  renderNowPlaying(state.nowPlaying, state.playbackBlockedReason, state.isPlaying);
+  // Re-anchor the progress bar to the server's number the moment it
+  // arrives; the tick timer takes over from here until the next update.
+  progressAnchor =
+    state.nowPlaying && typeof state.progressMs === 'number'
+      ? {
+          baseMs: state.progressMs,
+          anchoredAt: Date.now(),
+          durationMs: state.nowPlaying.durationMs,
+          playing: state.isPlaying === true,
+        }
+      : null;
+
+  renderNowPlaying(state.nowPlaying, state.playbackBlockedReason, state.isPlaying, state.progressMs);
   renderQueue(state.queue);
   renderReaddableList('autopilot-list', state.fallbackTracks, 'Add to queue', 'Nothing in the Autopilot Mix right now.');
   renderReaddableList('skipped-list', state.skippedSongs, 'Re-add', 'Nothing skipped yet.');
   renderReaddableList('history-list', state.playHistory, 'Re-add', 'Nothing played yet.');
 }
 
-function renderNowPlaying(track, playbackBlockedReason, isPlaying) {
+function renderNowPlaying(track, playbackBlockedReason, isPlaying, progressMs) {
   const container = document.getElementById('now-playing');
   if (!container) return;
 
@@ -119,9 +144,47 @@ function renderNowPlaying(track, playbackBlockedReason, isPlaying) {
         </div>
         ${voteButtonsHtml(track)}
       </div>
+      ${progressBarHtml(track, progressMs)}
       ${isHostView ? hostControlsHtml(isPlaying) : ''}
     </div>
   `;
+}
+
+/**
+ * Rendered with the real position immediately (not zero) so the bar doesn't
+ * visibly jump on every state update - the tick timer only ever nudges it
+ * forward from here. Hidden entirely until the first poll reports a
+ * position, rather than showing a bar stuck at 0:00 that might be wrong.
+ */
+function progressBarHtml(track, progressMs) {
+  if (typeof progressMs !== 'number' || !track.durationMs) return '';
+  const pct = Math.min(100, (progressMs / track.durationMs) * 100);
+  return `
+    <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width: ${pct}%"></div></div>
+    <div class="progress-times"><span id="progress-elapsed">${fmtTime(progressMs)}</span><span>${fmtTime(track.durationMs)}</span></div>
+  `;
+}
+
+/** Interpolates the bar between server updates - see progressAnchor. */
+function tickProgressBar() {
+  if (!progressAnchor) return;
+  const fill = document.getElementById('progress-fill');
+  const elapsed = document.getElementById('progress-elapsed');
+  if (!fill || !elapsed) return;
+
+  const ms = Math.min(
+    progressAnchor.durationMs,
+    progressAnchor.baseMs + (progressAnchor.playing ? Date.now() - progressAnchor.anchoredAt : 0)
+  );
+  fill.style.width = `${(ms / progressAnchor.durationMs) * 100}%`;
+  elapsed.textContent = fmtTime(ms);
+}
+
+function fmtTime(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, '0');
+  return `${minutes}:${seconds}`;
 }
 
 /** Renders into both #queue-list-home (Home tab) and #queue-list-tab (Queue tab) - same data, same markup, two places to see it. */
@@ -131,10 +194,14 @@ function renderQueue(queue) {
       ? `<p class="empty-state">Queue's empty. Search below to add the next song.</p>`
       : queue
           .map(
-            (track) => `
-              <div class="queue-item" data-item-id="${track.id}">
+            // The first row is what plays next - it gets a highlighted
+            // treatment so the fair-rotation outcome is *visible*, not
+            // something you have to infer from the ordering.
+            (track, index) => `
+              <div class="queue-item ${index === 0 ? 'up-next' : ''}" data-item-id="${track.id}">
                 <div class="art" style="background-image: url('${track.albumArt || ''}')"></div>
                 <div class="track-info">
+                  ${index === 0 ? '<div class="up-next-label">Up next</div>' : ''}
                   <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}</div>
                   <div class="track-artist">${escapeHtml(track.artist)}</div>
                   <div class="added-by">${escapeHtml(track.addedBy.name)}</div>

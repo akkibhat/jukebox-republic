@@ -205,6 +205,46 @@ input {
   margin-top: 12px;
 }
 
+/* --- Now-playing progress bar --- */
+
+.progress-track {
+  height: 4px;
+  background: var(--surface-raised);
+  border-radius: 2px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.progress-times {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  margin-top: 4px;
+}
+
+/* --- "Up next" highlight on the queue's first row --- */
+
+.queue-item.up-next {
+  border-color: var(--accent-dim);
+}
+
+.up-next-label {
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
 .host-controls {
   display: flex;
   gap: 8px;

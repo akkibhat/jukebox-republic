@@ -56,23 +56,31 @@ async function pollAndAdvance(session, io) {
 
   // Picked up here so the host controls can show "Playing"/"Paused" and
   // grey out whichever button doesn't apply, even when the host pauses or
-  // resumes from their own Spotify app instead of Jukebox Republic's buttons. Only
-  // broadcasts when it actually changes, so an unremarkable poll tick
-  // doesn't re-send state to everyone for no reason.
+  // resumes from their own Spotify app instead of Jukebox Republic's buttons.
   const isPlaying = state?.isPlaying ?? null;
-  if (session.isPlaying !== isPlaying) {
-    session.isPlaying = isPlaying;
-    await broadcastState(io, session);
+  const isPlayingChanged = session.isPlaying !== isPlaying;
+  session.isPlaying = isPlaying;
+
+  // Progress is re-anchored to Spotify's own number on every poll; between
+  // polls each client interpolates forward on its own clock, so the
+  // progress bar looks smooth without asking Spotify more than once every
+  // few seconds - and any interpolation drift self-corrects on the next tick.
+  if (state) {
+    session.progressMs = state.progressMs;
   }
 
   if (!session.nowPlaying) {
+    if (isPlayingChanged) await broadcastState(io, session);
     // Nothing queued up on our side yet - if the host's device is sitting
     // idle, kick off the first track in the fair queue (or a backup pick).
     await tryStartNext(session, io);
     return;
   }
 
-  if (!state) return; // host's device went away (asleep, disconnected) - just wait for it to come back
+  if (!state) {
+    if (isPlayingChanged) await broadcastState(io, session);
+    return; // host's device went away (asleep, disconnected) - just wait for it to come back
+  }
 
   if (state.track.uri !== session.nowPlaying.uri) {
     // Something's playing that Jukebox Republic didn't pick - most likely the host
@@ -89,6 +97,11 @@ async function pollAndAdvance(session, io) {
   const trackFinishing = state.progressMs + END_OF_TRACK_LEAD_MS >= session.nowPlaying.durationMs;
   if (trackFinishing) {
     await advanceToNext(session, io);
+  } else {
+    // An ordinary mid-track tick used to be silent, but now it carries the
+    // fresh progress number - broadcast so every phone's bar re-anchors to
+    // reality instead of drifting on its own interpolation.
+    await broadcastState(io, session);
   }
 }
 
@@ -164,6 +177,9 @@ async function tryStartNext(session, io) {
 
   session.playbackBlockedReason = null;
   session.nowPlaying = usingFallback ? makeFallbackNowPlaying(trackToPlay) : trackToPlay;
+  // The track just started - reset progress to zero immediately rather than
+  // leaving the previous track's number showing until the next poll tick.
+  session.progressMs = 0;
   if (!usingFallback) {
     session.queue = session.queue.filter((item) => item.id !== trackToPlay.id);
   }
