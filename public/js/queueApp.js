@@ -12,6 +12,13 @@ const SEARCH_DEBOUNCE_MS = 300;
 let isHostView = false;
 let myGuestId = null;
 
+// Whether THIS connection may use the host's playback/kick powers - true
+// for the host and for a promoted co-host. Comes from the server with
+// every state broadcast (so promotion/demotion takes effect live), and the
+// server re-checks every action anyway; this only decides which buttons
+// render.
+let havePowers = false;
+
 // Caches for the "read-only list with a button that sends it to the main
 // queue" sections (Autopilot Mix, skipped songs, play history) - a click
 // only carries a list id + index, so this is where the full track objects
@@ -54,6 +61,7 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
 
         socket.on('state', renderState);
         socket.on('session:ended', renderSessionEnded);
+        socket.on('kicked', () => renderFatalError('The host removed you from this session.'));
 
         wireSearch(sessionId, socket);
         wireClicks(socket);
@@ -93,14 +101,13 @@ function ensureName() {
 // --- Rendering ----------------------------------------------------------
 
 function renderState(state) {
+  havePowers = Boolean(state.youHavePowers);
+
   const guestCountEl = document.getElementById('guest-count');
   if (guestCountEl) {
     guestCountEl.textContent = `${state.connectedGuestCount} connected`;
   }
-  const guestNamesEl = document.getElementById('guest-names');
-  if (guestNamesEl) {
-    guestNamesEl.textContent = state.guestNames && state.guestNames.length ? state.guestNames.join(', ') : '';
-  }
+  renderGuestChips(state.guests || []);
 
   // Re-anchor the progress bar to the server's number the moment it
   // arrives; the tick timer takes over from here until the next update.
@@ -122,6 +129,34 @@ function renderState(state) {
   renderReaddableList('history-list', state.playHistory, 'Re-add', 'Nothing played yet.', {
     golden: findGoldenRecord(state.playHistory),
   });
+}
+
+/**
+ * The "who's here" row as chips instead of a plain name list. Everyone
+ * sees names and co-host stars; anyone with powers additionally gets a
+ * kick button per chip, and the true host gets the promote/demote star
+ * toggle. (The server enforces all of it regardless - these buttons are
+ * just affordances.)
+ */
+function renderGuestChips(guests) {
+  const el = document.getElementById('guest-names');
+  if (!el) return;
+
+  el.innerHTML = guests
+    .map((guest) => {
+      const isMe = guest.id === myGuestId;
+      const badge = guest.isCoHost ? '<span class="cohost-badge" title="Co-host">&#9733;</span>' : '';
+      const promote =
+        isHostView && !isMe
+          ? `<button class="chip-action promote-button" data-guest-id="${guest.id}" data-promote="${guest.isCoHost ? 'false' : 'true'}" title="${guest.isCoHost ? 'Remove co-host powers' : 'Make co-host'}">&#9733;</button>`
+          : '';
+      const kick =
+        havePowers && !isMe
+          ? `<button class="chip-action kick-button" data-guest-id="${guest.id}" data-guest-name="${escapeHtml(guest.name)}" title="Remove from session">&times;</button>`
+          : '';
+      return `<span class="guest-chip">${escapeHtml(guest.name)}${isMe ? ' (you)' : ''}${badge}${promote}${kick}</span>`;
+    })
+    .join('');
 }
 
 /**
@@ -165,7 +200,7 @@ function renderNowPlaying(track, playbackBlockedReason, isPlaying, progressMs) {
         ${voteButtonsHtml(track)}
       </div>
       ${progressBarHtml(track, progressMs)}
-      ${isHostView ? hostControlsHtml(isPlaying) : ''}
+      ${havePowers ? hostControlsHtml(isPlaying) : ''}
     </div>
   `;
 }
@@ -503,6 +538,29 @@ function wireClicks(socket) {
       socket.emit('queue:mode', { mode: modeToggle.dataset.mode }, (response) => {
         if (response?.error) showToast(response.error);
       });
+      return;
+    }
+
+    const kickButton = event.target.closest('.kick-button');
+    if (kickButton) {
+      if (!confirm(`Remove ${kickButton.dataset.guestName} from the session? They won't be able to rejoin.`)) return;
+      socket.emit('guest:kick', { guestId: kickButton.dataset.guestId }, (response) => {
+        if (response?.error) showToast(response.error);
+      });
+      return;
+    }
+
+    // Same trick as the mode toggle: the button carries the state to set,
+    // not the current one.
+    const promoteButton = event.target.closest('.promote-button');
+    if (promoteButton) {
+      socket.emit(
+        'cohost:set',
+        { guestId: promoteButton.dataset.guestId, promote: promoteButton.dataset.promote === 'true' },
+        (response) => {
+          if (response?.error) showToast(response.error);
+        }
+      );
       return;
     }
 

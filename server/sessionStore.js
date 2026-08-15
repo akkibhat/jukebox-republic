@@ -46,6 +46,8 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
     isPlaying: null, // true/false once known from Spotify; null until the first poll or host action reports it
     progressMs: null, // how far into the current track playback is, per the last poll - clients interpolate between polls for a smooth progress bar
     queueMode: 'fair', // 'fair' (round-robin by contributor) or 'crowd' (most votes first) - the host can switch mid-session, see queue:mode in sockets.js
+    bannedGuestIds: new Set(), // guests the host kicked - their join attempts are rejected. Soft moderation: clearing localStorage mints a new id, which is fine for a car/party full of friends
+    coHostIds: new Set(), // guests the host promoted - they get the host's playback/kick/end powers, but playback stays on the host's Spotify account
   };
 
   sessions.set(id, session);
@@ -89,13 +91,20 @@ export function connectedGuestCount(session) {
   return count;
 }
 
-/** Names of everyone currently connected, for the "who's in the car" display. */
-export function connectedGuestNames(session) {
-  const names = [];
+/**
+ * Everyone currently connected, for the "who's here" chip row - with ids
+ * (so the host's kick/promote buttons know who to target) and each one's
+ * co-host status (so the badge renders on every phone, not just the
+ * host's).
+ */
+export function connectedGuests(session) {
+  const guests = [];
   for (const guest of session.guests.values()) {
-    if (guest.connected) names.push(guest.name);
+    if (guest.connected) {
+      guests.push({ id: guest.id, name: guest.name, isCoHost: session.coHostIds.has(guest.id) });
+    }
   }
-  return names;
+  return guests;
 }
 
 export function makeQueueItem({ track, guest, round, duplicateReason = null }) {

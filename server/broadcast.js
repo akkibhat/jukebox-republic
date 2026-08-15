@@ -2,7 +2,7 @@
 // to everyone connected to its room. Pulled out into its own module so both
 // sockets.js (reacting to guest actions) and playbackEngine.js (reacting to
 // the clock) can push updates without importing each other.
-import { serializeItem, connectedGuestCount, connectedGuestNames } from './sessionStore.js';
+import { serializeItem, connectedGuestCount, connectedGuests } from './sessionStore.js';
 import { sortQueue, downvoteThreshold } from './queueFairness.js';
 
 export function roomName(sessionId) {
@@ -24,6 +24,7 @@ export async function broadcastState(io, session) {
   // always reflect who's connected *right now*, not who was connected the
   // last time someone tapped a vote button.
   const threshold = downvoteThreshold(guestCount);
+  const guests = connectedGuests(session);
   const sockets = await io.in(roomName(session.id)).fetchSockets();
 
   for (const socket of sockets) {
@@ -36,11 +37,16 @@ export async function broadcastState(io, session) {
       playHistory: session.playHistory,
       fallbackTracks: session.fallbackTracks,
       connectedGuestCount: guestCount,
-      guestNames: connectedGuestNames(session),
+      guests,
       playbackBlockedReason: session.playbackBlockedReason,
       isPlaying: session.isPlaying,
       progressMs: session.progressMs,
       queueMode: session.queueMode,
+      // Personalized like myVote: whether THIS connection may use the
+      // host's playback/kick powers (being the host, or promoted co-host).
+      // The server still checks every action - this only decides whether
+      // the buttons render.
+      youHavePowers: socket.data.isHost || session.coHostIds.has(guestId),
     });
   }
 }

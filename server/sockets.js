@@ -26,6 +26,9 @@ export function registerSocketHandlers(io) {
     socket.on('join', async ({ sessionId, guestId, name, isHost }, ack) => {
       const session = getSession(sessionId);
       if (!session) return ack?.({ error: 'This session has ended, or the code is wrong.' });
+      if (session.bannedGuestIds.has(guestId)) {
+        return ack?.({ error: 'The host removed you from this session.' });
+      }
 
       const guest = upsertGuest(session, guestId, name);
       socket.data.sessionId = sessionId;
@@ -124,14 +127,15 @@ export function registerSocketHandlers(io) {
       }
     });
 
-    // --- Host-only playback overrides ------------------------------------
+    // --- Host/co-host playback overrides ---------------------------------
     // The driver should always be able to skip or pause regardless of what
     // the vote threshold says - the group's vote is a way for everyone
     // *else* to weigh in, not a way to lock the driver out of their own
-    // stereo.
+    // stereo. A promoted co-host shares these powers (see cohost:set) -
+    // the "let my passenger manage the stereo" case.
 
     socket.on('playback:skip', async (_payload, ack) => {
-      const session = requireHost(socket, ack);
+      const session = requireHostPowers(socket, ack);
       if (!session) return;
       try {
         await skipCurrentTrack(session, io);
@@ -143,7 +147,7 @@ export function registerSocketHandlers(io) {
     });
 
     socket.on('playback:pause', async (_payload, ack) => {
-      const session = requireHost(socket, ack);
+      const session = requireHostPowers(socket, ack);
       if (!session) return;
       try {
         const accessToken = await ensureFreshToken(session);
@@ -161,7 +165,7 @@ export function registerSocketHandlers(io) {
     });
 
     socket.on('playback:resume', async (_payload, ack) => {
-      const session = requireHost(socket, ack);
+      const session = requireHostPowers(socket, ack);
       if (!session) return;
       try {
         const accessToken = await ensureFreshToken(session);
@@ -214,8 +218,64 @@ export function registerSocketHandlers(io) {
       }
     });
 
-    socket.on('session:end', async (_payload, ack) => {
+    // --- Moderation ------------------------------------------------------
+
+    /**
+     * Kicking bans the guest id and drops every connection it has open.
+     * Their already-queued songs stay (the user's call: the music was
+     * presumably fine, the person was the problem), and history keeps
+     * their name. Soft by design - a determined kicked guest can clear
+     * localStorage for a fresh id, but this is moderation for a car full
+     * of friends, not an adversarial system.
+     */
+    socket.on('guest:kick', async ({ guestId }, ack) => {
+      const session = requireHostPowers(socket, ack);
+      if (!session) return;
+
+      const target = session.guests.get(guestId);
+      if (!target) return ack?.({ error: 'That guest is not in this session.' });
+      if (guestId === socket.data.guestId) return ack?.({ error: "You can't kick yourself." });
+
+      const sockets = await io.in(roomName(session.id)).fetchSockets();
+      const targetSockets = sockets.filter((s) => s.data.guestId === guestId);
+      if (targetSockets.some((s) => s.data.isHost)) {
+        return ack?.({ error: "You can't kick the host." });
+      }
+
+      session.bannedGuestIds.add(guestId);
+      session.coHostIds.delete(guestId); // a kicked co-host loses their powers too
+      target.connected = false;
+      for (const s of targetSockets) {
+        s.emit('kicked'); // tell them why before the connection drops, so their screen can say so
+        s.disconnect(true);
+      }
+
+      ack?.({ ok: true });
+      await broadcastState(io, session);
+    });
+
+    /**
+     * Promote or demote a co-host. True-host-only (not co-hosts - powers
+     * that can mint more powers stay with the person whose Spotify account
+     * is on the line). Playback keeps running on the host's account either
+     * way; this only shares the control buttons.
+     */
+    socket.on('cohost:set', async ({ guestId, promote }, ack) => {
       const session = requireHost(socket, ack);
+      if (!session) return;
+
+      const target = session.guests.get(guestId);
+      if (!target) return ack?.({ error: 'That guest is not in this session.' });
+
+      if (promote) session.coHostIds.add(guestId);
+      else session.coHostIds.delete(guestId);
+
+      ack?.({ ok: true });
+      await broadcastState(io, session);
+    });
+
+    socket.on('session:end', async (_payload, ack) => {
+      const session = requireHostPowers(socket, ack);
       if (!session) return;
 
       try {
@@ -248,7 +308,7 @@ export function registerSocketHandlers(io) {
   });
 }
 
-/** Looks up the caller's session and confirms they're the host, acking an error and returning null if not. */
+/** Looks up the caller's session and confirms they're the true host, acking an error and returning null if not. For powers a co-host shares, use requireHostPowers instead. */
 function requireHost(socket, ack) {
   const session = getSession(socket.data.sessionId);
   if (!session) {
@@ -257,6 +317,25 @@ function requireHost(socket, ack) {
   }
   if (!socket.data.isHost) {
     ack?.({ error: 'Only the host can do that.' });
+    return null;
+  }
+  return session;
+}
+
+/**
+ * Like requireHost, but also satisfied by a promoted co-host. Guards the
+ * shared powers (pause/resume/skip/kick/end); what stays true-host-only is
+ * anything that changes who holds power (cohost:set), the session's rules
+ * (queue:mode), or the host's own device (playback:volume).
+ */
+function requireHostPowers(socket, ack) {
+  const session = getSession(socket.data.sessionId);
+  if (!session) {
+    ack?.({ error: 'Session not found.' });
+    return null;
+  }
+  if (!socket.data.isHost && !session.coHostIds.has(socket.data.guestId)) {
+    ack?.({ error: 'Only the host or a co-host can do that.' });
     return null;
   }
   return session;
