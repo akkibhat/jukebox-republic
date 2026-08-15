@@ -70,6 +70,20 @@ async function pollAndAdvance(session, io) {
   }
 
   if (!session.nowPlaying) {
+    if (state?.isPlaying && state.track) {
+      // The host was already playing something before this session had its
+      // first pick - the classic case being "started a song in Spotify,
+      // THEN created the session". Adopt it exactly like a mid-session
+      // manual takeover (below) instead of talking over it with the queue
+      // or the Autopilot Mix; the queue takes over when this track ends.
+      // A *paused* leftover track deliberately doesn't count - starting a
+      // session is a request for music, and adopting something paused
+      // would just hold everything silent indefinitely.
+      session.nowPlaying = makeExternalNowPlaying(state.track);
+      await broadcastState(io, session);
+      return;
+    }
+
     if (isPlayingChanged) await broadcastState(io, session);
     // Nothing queued up on our side yet - if the host's device is sitting
     // idle, kick off the first track in the fair queue (or a backup pick).
