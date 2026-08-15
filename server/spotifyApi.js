@@ -18,7 +18,16 @@ async function spotifyFetch(path, accessToken, options = {}) {
   if (response.status === 204) return null; // Spotify uses 204 for successful playback commands
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Spotify API ${path} failed: ${response.status} ${body}`);
+    const error = new Error(`Spotify API ${path} failed: ${response.status} ${body}`);
+    // Attached so callers can tell "Spotify explicitly said no to this"
+    // (4xx) apart from "Spotify's own servers had a problem" (5xx) or
+    // rate-limiting (429) - see classifyPlaybackError in playbackEngine.js.
+    // A raw fetch() failure (no network route to Spotify at all) throws
+    // before reaching this point and so never gets a .status, which is
+    // itself the signal that it was a connectivity problem, not Spotify
+    // rejecting the request.
+    error.status = response.status;
+    throw error;
   }
 
   const text = await response.text();

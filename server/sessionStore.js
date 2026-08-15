@@ -110,6 +110,7 @@ export function makeQueueItem({ track, guest, round }) {
     round,
     votes: new Map(), // guestId -> 'up' | 'down'
     netVotes: 0,
+    playFailures: 0, // bumped by playbackEngine.js on a transient play failure - see pickNextQueueItem
   };
 }
 

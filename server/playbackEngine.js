@@ -23,6 +23,11 @@ const POLL_INTERVAL_MS = 4000;
 // Advance a little before the track actually ends so there's no dead-air
 // gap while we wait for Spotify to confirm the next PUT /play call.
 const END_OF_TRACK_LEAD_MS = 2500;
+// A queued track gets this many in-place retries before it's pushed behind
+// anything that hasn't failed yet, and this many total attempts before
+// cartunes gives up on it entirely - see pickNextQueueItem.
+const RETRY_DEMOTION_THRESHOLD = 2;
+const MAX_TRANSIENT_FAILURES = 5;
 
 /** sessionId -> setInterval handle, so each session's loop can be stopped independently. */
 const loops = new Map();
@@ -93,7 +98,7 @@ async function pollAndAdvance(session, io) {
  * whether to keep waiting or move on.
  */
 async function tryStartNext(session, io) {
-  const [next, ...rest] = sortQueue(session.queue);
+  const next = pickNextQueueItem(session.queue);
   const usingFallback = !next;
 
   const accessToken = await ensureFreshToken(session);
@@ -126,35 +131,78 @@ async function tryStartNext(session, io) {
   try {
     await playTrack(accessToken, trackToPlay.uri, deviceId);
   } catch (err) {
-    // Spotify refused to start this particular track. Previously this
-    // would just throw, get swallowed by the poll loop's catch, and leave
-    // the same broken track stuck at the front of the queue forever -
-    // every 4s poll would retry it and fail the same way. A queued song
-    // gets dropped (someone can always re-add it), but an Autopilot Mix
-    // pick moves to the back of the line instead of being discarded - the
-    // failure might just be a network blip rather than something wrong
-    // with that specific track, so it's worth retrying once everything
-    // else has had a turn.
     console.error(`[playback] session ${session.roomCode} could not start "${trackToPlay.name}":`, err.message);
     session.playbackBlockedReason = `Spotify wouldn't start "${trackToPlay.name}" - trying the next song.`;
+
     if (usingFallback) {
+      // Autopilot Mix picks always get a second chance, moved to the back
+      // of the line rather than dropped - the whole point of the mix is
+      // to never need active management, so it should be forgiving.
       moveFallbackTrackToEnd(session, trackToPlay.uri);
+    } else if (classifyPlaybackError(err) === 'permanent') {
+      // Spotify explicitly rejected this specific track (region lock, a
+      // restriction, a removed/invalid uri) - retrying changes nothing,
+      // so there's no reason to make whoever added it wait it out.
+      session.queue = session.queue.filter((item) => item.id !== trackToPlay.id);
     } else {
-      session.queue = rest;
+      // Transient (network blip, Spotify 5xx, rate limit) - worth
+      // retrying. pickNextQueueItem() handles the demotion once
+      // playFailures crosses the threshold; this just increments it.
+      // Previously any failure here would just throw, get swallowed by
+      // the poll loop's catch, and leave the same broken track stuck at
+      // the front forever, retried identically every 4s.
+      trackToPlay.playFailures += 1;
+      if (trackToPlay.playFailures >= MAX_TRANSIENT_FAILURES) {
+        session.queue = session.queue.filter((item) => item.id !== trackToPlay.id);
+      }
     }
+
     await broadcastState(io, session);
     return false;
   }
 
   session.playbackBlockedReason = null;
   session.nowPlaying = usingFallback ? makeFallbackNowPlaying(trackToPlay) : trackToPlay;
-  session.queue = rest;
+  if (!usingFallback) {
+    session.queue = session.queue.filter((item) => item.id !== trackToPlay.id);
+  }
   // Once a track plays via the Autopilot Mix, it's used - it shouldn't
   // cycle back around later, and it also stops showing up in the "Add to
   // queue" preview list (there'd be nothing left to add, it's playing).
   if (usingFallback) removeFromFallbackTracks(session, trackToPlay.uri);
   await broadcastState(io, session);
   return true;
+}
+
+/**
+ * Picks the next queue item in fair order, except a track that's already
+ * failed to start `RETRY_DEMOTION_THRESHOLD` times gets pushed behind
+ * everything that hasn't - one repeatedly-failing song shouldn't stall
+ * everyone else's turn. It's still eventually retried, just once nothing
+ * fresher is waiting (and it gets dropped outright past
+ * MAX_TRANSIENT_FAILURES - see tryStartNext).
+ */
+function pickNextQueueItem(queue) {
+  const ordered = sortQueue(queue);
+  const notYetDemoted = ordered.filter((item) => item.playFailures < RETRY_DEMOTION_THRESHOLD);
+  const demoted = ordered.filter((item) => item.playFailures >= RETRY_DEMOTION_THRESHOLD);
+  return notYetDemoted[0] || demoted[0] || null;
+}
+
+/**
+ * Sorts a playback failure into "worth retrying" or "won't ever succeed".
+ * A raw fetch() failure (no network route to Spotify at all - the request
+ * never got a response) never gets a `.status` attached, which doubles as
+ * the signal that it's a connectivity problem rather than Spotify
+ * rejecting the request. 5xx (Spotify's own servers) and 429 (rate
+ * limited) are also not the track's fault. Anything else - 403 restricted,
+ * 404 not found, etc. - is Spotify explicitly saying no to this specific
+ * track, and no amount of retrying changes that answer.
+ */
+function classifyPlaybackError(err) {
+  if (typeof err.status !== 'number') return 'transient';
+  if (err.status === 429 || err.status >= 500) return 'transient';
+  return 'permanent';
 }
 
 /** Autopilot Mix tracks are taken in order (not randomly) so it's predictable, and each one is used at most once per trip. */
