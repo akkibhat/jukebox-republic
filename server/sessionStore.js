@@ -8,6 +8,7 @@
 // nothing outside this file knows or cares how sessions are stored.
 
 import { randomUUID } from 'node:crypto';
+import { deletePersisted } from './persistence.js';
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I - easy to read aloud
 
@@ -69,6 +70,19 @@ export function endSession(sessionId) {
   if (!session) return;
   roomCodeIndex.delete(session.roomCode);
   sessions.delete(sessionId);
+  deletePersisted(sessionId); // an ended session must not resurrect on the next boot
+}
+
+/**
+ * Puts a session restored from Firestore back into the in-memory store at
+ * boot. Playback loops are NOT restarted here - they come back lazily as
+ * each client's socket reconnects and re-joins (socket.io re-emits 'join'
+ * on every reconnect, and startPlaybackLoop is a no-op when already
+ * running), so a restored session nobody returns to just sits idle.
+ */
+export function restoreSessionIntoStore(session) {
+  sessions.set(session.id, session);
+  roomCodeIndex.set(session.roomCode, session.id);
 }
 
 export function upsertGuest(session, guestId, name) {

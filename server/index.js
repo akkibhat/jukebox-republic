@@ -11,6 +11,8 @@ import { config } from './config.js';
 import { authRouter } from './routes/auth.js';
 import { apiRouter } from './routes/api.js';
 import { registerSocketHandlers } from './sockets.js';
+import { restoreSessions } from './persistence.js';
+import { restoreSessionIntoStore } from './sessionStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,6 +25,15 @@ app.use('/auth', authRouter);
 app.use('/api', apiRouter);
 
 registerSocketHandlers(io);
+
+// Bring back any sessions that survived the last shutdown (no-op unless
+// Firestore persistence is configured - see persistence.js). Done before
+// listen so a rejoining phone can't race the restore.
+const restored = await restoreSessions();
+for (const session of restored) restoreSessionIntoStore(session);
+if (restored.length > 0) {
+  console.log(`[persistence] restored ${restored.length} session(s): ${restored.map((s) => s.roomCode).join(', ')}`);
+}
 
 httpServer.listen(config.port, () => {
   console.log(`Jukebox Republic listening on ${config.publicBaseUrl} (port ${config.port})`);

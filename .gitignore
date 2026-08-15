@@ -3,3 +3,6 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+
+# Firestore service-account credentials (see .env.example) - never commit
+*service-account*.json

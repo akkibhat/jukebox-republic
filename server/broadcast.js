@@ -4,6 +4,7 @@
 // the clock) can push updates without importing each other.
 import { serializeItem, connectedGuestCount, connectedGuests } from './sessionStore.js';
 import { sortQueue, downvoteThreshold } from './queueFairness.js';
+import { schedulePersist } from './persistence.js';
 
 export function roomName(sessionId) {
   return `session:${sessionId}`;
@@ -49,4 +50,8 @@ export async function broadcastState(io, session) {
       youHavePowers: socket.data.isHost || session.coHostIds.has(guestId),
     });
   }
+
+  // Every state change flows through here, which makes this the one spot
+  // to mirror the session to Firestore (debounced - see persistence.js).
+  schedulePersist(session);
 }
