@@ -142,9 +142,10 @@ function renderQueue(queue) {
             <div class="track-artist">${escapeHtml(track.artist)}</div>
             <div class="added-by">${escapeHtml(track.addedBy.name)}</div>
             ${skipProgressHtml(track)}
+            ${duplicateBadgeHtml(track)}
           </div>
           ${voteButtonsHtml(track)}
-          ${track.addedBy.id === myGuestId ? removeButtonHtml() : ''}
+          ${track.addedBy.id === myGuestId || track.duplicateReason ? removeButtonHtml() : ''}
         </div>
       `
     )
@@ -208,6 +209,22 @@ function removeButtonHtml() {
 function skipProgressHtml(track) {
   if (!track.downvotes) return '';
   return `<div class="skip-progress">${track.downvotes} of ${track.threshold} downvotes to skip</div>`;
+}
+
+/**
+ * Duplicates are allowed in the queue, not blocked - this just makes sure
+ * nobody's surprised by one. Says *why* it's a duplicate (queued/playing/
+ * played) rather than a generic label, since that's the difference between
+ * "yeah I meant to do that" and "oh, someone already added this."
+ */
+function duplicateBadgeHtml(track) {
+  if (!track.duplicateReason) return '';
+  const label = {
+    queued: 'Already in queue',
+    playing: 'Currently playing',
+    played: 'Already played',
+  }[track.duplicateReason];
+  return `<div class="duplicate-badge">${label}</div>`;
 }
 
 /** Small "E" tag next to explicit tracks, everywhere a track name is rendered. */

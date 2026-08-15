@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { buildAuthorizeUrl, exchangeCodeForTokens } from '../spotifyAuth.js';
 import { getCurrentUserProfile, getPlaylistTracks } from '../spotifyApi.js';
-import { createSession } from '../sessionStore.js';
+import { createSession, addToFallbackTracks } from '../sessionStore.js';
 import { pickSeedPlaylist } from '../autopilotMix.js';
 
 export const authRouter = Router();
@@ -48,9 +48,10 @@ authRouter.get('/callback', async (req, res) => {
     // playlist) - the trip still starts fine, just without an Autopilot
     // Mix ready until someone adds a real song.
     const seedPlaylist = pickSeedPlaylist();
-    session.seedPlaylistId = seedPlaylist.id;
+    session.usedSeedPlaylistIds.push(seedPlaylist.id);
     try {
-      session.fallbackTracks = await getPlaylistTracks(tokens.accessToken, seedPlaylist.id);
+      const tracks = await getPlaylistTracks(tokens.accessToken, seedPlaylist.id);
+      addToFallbackTracks(session, tracks);
       console.log(
         `[auth] seeded Autopilot Mix for ${session.roomCode} from "${seedPlaylist.label}" (${session.fallbackTracks.length} tracks)`
       );

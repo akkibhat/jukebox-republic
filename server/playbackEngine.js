@@ -8,7 +8,7 @@
 import { getPlaybackState, getAvailableDevices, getPlaylistTracks, playTrack } from './spotifyApi.js';
 import { ensureFreshToken } from './spotifyAuth.js';
 import { sortQueue } from './queueFairness.js';
-import { otherSeedPlaylist } from './autopilotMix.js';
+import { nextUnusedSeedPlaylist } from './autopilotMix.js';
 import {
   addToSkippedSongs,
   addToPlayHistory,
@@ -16,6 +16,7 @@ import {
   makeExternalNowPlaying,
   removeFromFallbackTracks,
   moveFallbackTrackToEnd,
+  addToFallbackTracks,
 } from './sessionStore.js';
 import { broadcastState } from './broadcast.js';
 
@@ -211,26 +212,26 @@ function nextFallbackTrack(session) {
 }
 
 /**
- * Pulls in the second hardcoded seed playlist once the first one's fully
- * drained. Only ever attempted once per trip (usedBothSeedPlaylists),
- * whether it succeeds or fails - if it fails, the poll loop would
- * otherwise hit this same failing fetch every 4s for the rest of the trip.
+ * Pulls in one more hardcoded seed playlist - whichever hasn't been used
+ * this trip yet - once the pool's fully drained. Each playlist is only
+ * ever attempted once per trip (marked used before the fetch, success or
+ * failure), so a failing fetch doesn't get retried every 4s for the rest
+ * of the drive. Once every hardcoded playlist has been used,
+ * nextUnusedSeedPlaylist returns null and this becomes a cheap no-op.
  */
 async function topUpAutopilotMix(session, accessToken) {
-  if (session.usedBothSeedPlaylists) return;
-  session.usedBothSeedPlaylists = true;
-
-  const next = otherSeedPlaylist(session.seedPlaylistId);
+  const next = nextUnusedSeedPlaylist(session.usedSeedPlaylistIds);
   if (!next) return;
+  session.usedSeedPlaylistIds.push(next.id);
 
   try {
     const tracks = await getPlaylistTracks(accessToken, next.id);
-    session.fallbackTracks.push(...tracks);
+    addToFallbackTracks(session, tracks);
     console.log(
-      `[playback] session ${session.roomCode} topped up Autopilot Mix from "${next.label}" (${tracks.length} tracks)`
+      `[playback] session ${session.roomCode} topped up Autopilot Mix from "${next.label}" (${session.fallbackTracks.length} tracks now in pool)`
     );
   } catch (err) {
-    console.error(`[playback] session ${session.roomCode} failed to top up Autopilot Mix:`, err.message);
+    console.error(`[playback] session ${session.roomCode} failed to top up Autopilot Mix from "${next.label}":`, err.message);
   }
 }
 

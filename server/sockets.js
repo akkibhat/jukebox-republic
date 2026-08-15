@@ -8,6 +8,7 @@ import {
   upsertGuest,
   connectedGuestCount,
   makeQueueItem,
+  detectDuplicate,
   addToSkippedSongs,
   removeFromSkippedSongs,
   removeFromFallbackTracks,
@@ -49,12 +50,15 @@ export function registerSocketHandlers(io) {
       const guest = session.guests.get(socket.data.guestId);
       if (!guest) return ack?.({ error: 'Rejoin the session and try again.' });
 
-      const alreadyQueued =
-        session.nowPlaying?.uri === track.uri || session.queue.some((item) => item.uri === track.uri);
-      if (alreadyQueued) return ack?.({ error: 'That song is already in the queue.' });
+      // Duplicates are allowed now, not rejected - sometimes a repeat is
+      // intentional, sometimes it's added without realizing it's already
+      // queued or already played. Either way it's flagged (see
+      // detectDuplicate) rather than blocked, and anyone can pull it back
+      // out below, not just whoever added it.
+      const duplicateReason = detectDuplicate(session, track.uri);
 
       const round = nextRoundForGuest(guest);
-      const item = makeQueueItem({ track, guest, round });
+      const item = makeQueueItem({ track, guest, round, duplicateReason });
       session.queue.push(item);
       removeFromSkippedSongs(session, track.uri); // re-adding a skipped song takes it off that list
       removeFromFallbackTracks(session, track.uri); // promoted to the real queue - out of the Autopilot Mix pool
@@ -66,13 +70,17 @@ export function registerSocketHandlers(io) {
     // A guest can pull their own submission back out any time before it
     // plays, no group vote needed - that's just changing your mind, not a
     // democratic rejection, so it doesn't touch the skipped list either.
+    // A flagged duplicate is the one exception to "only the adder can
+    // remove it" - it was often added without realizing it's a repeat, so
+    // anyone in the car can clear it rather than waiting on the adder to
+    // notice.
     socket.on('queue:remove', async ({ itemId }, ack) => {
       const session = getSession(socket.data.sessionId);
       if (!session) return ack?.({ error: 'Session not found.' });
 
       const item = session.queue.find((q) => q.id === itemId);
       if (!item) return ack?.({ error: 'That track is no longer in the queue.' });
-      if (item.addedBy.id !== socket.data.guestId) {
+      if (item.addedBy.id !== socket.data.guestId && !item.duplicateReason) {
         return ack?.({ error: 'You can only remove songs you added.' });
       }
 

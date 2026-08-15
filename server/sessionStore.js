@@ -40,8 +40,7 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
     skippedSongs: [], // tracks the group voted out - see addToSkippedSongs below
     playHistory: [], // rolling "recently played" log - see addToPlayHistory below
     fallbackTracks: [], // the Autopilot Mix - seeded once at login from autopilotMix.js; each track is removed once it's used (played or promoted to the queue)
-    seedPlaylistId: null, // which of the two hardcoded playlists it was seeded from - set right after seeding, see routes/auth.js
-    usedBothSeedPlaylists: false, // flips true once playbackEngine.js has topped up from the second playlist, so it only tries once
+    usedSeedPlaylistIds: [], // hardcoded playlist ids already pulled from this trip - set right after seeding (routes/auth.js), grows as playbackEngine.js tops up
     playbackBlockedReason: null, // set by playbackEngine.js when Spotify can't see any device to play on
     isPlaying: null, // true/false once known from Spotify; null until the first poll or host action reports it
   };
@@ -96,7 +95,7 @@ export function connectedGuestNames(session) {
   return names;
 }
 
-export function makeQueueItem({ track, guest, round }) {
+export function makeQueueItem({ track, guest, round, duplicateReason = null }) {
   return {
     id: randomUUID(),
     uri: track.uri,
@@ -111,7 +110,23 @@ export function makeQueueItem({ track, guest, round }) {
     votes: new Map(), // guestId -> 'up' | 'down'
     netVotes: 0,
     playFailures: 0, // bumped by playbackEngine.js on a transient play failure - see pickNextQueueItem
+    duplicateReason, // 'queued' | 'playing' | 'played' | null - see detectDuplicate
   };
+}
+
+/**
+ * Duplicates are allowed in the queue - sometimes a repeat is intentional
+ * - but flagged, since sometimes it's added without realizing it's already
+ * queued or already played. The reason string doubles as the truthy check
+ * (null means "not a duplicate") and lets the UI say *why* rather than
+ * just "duplicate". Checked in this order because a track can only match
+ * one of these at a time (nowPlaying is never also in session.queue).
+ */
+export function detectDuplicate(session, uri) {
+  if (session.nowPlaying?.uri === uri) return 'playing';
+  if (session.queue.some((item) => item.uri === uri)) return 'queued';
+  if (session.playHistory.some((item) => item.uri === uri)) return 'played';
+  return null;
 }
 
 /**
@@ -201,6 +216,22 @@ export function removeFromFallbackTracks(session, uri) {
 }
 
 /**
+ * Merges freshly-fetched tracks into the Autopilot Mix, skipping any uri
+ * already in the pool. The same song can plausibly turn up on more than
+ * one of the hardcoded seed playlists (they're all "road trip" themed),
+ * and there's no reason to offer it twice.
+ */
+export function addToFallbackTracks(session, tracks) {
+  const existingUris = new Set(session.fallbackTracks.map((t) => t.uri));
+  for (const track of tracks) {
+    if (!existingUris.has(track.uri)) {
+      session.fallbackTracks.push(track);
+      existingUris.add(track.uri);
+    }
+  }
+}
+
+/**
  * A failed play attempt (region lock, a transient API error, a network
  * blip) doesn't necessarily mean the track itself is bad, so unlike a
  * successful play it isn't dropped - just sent to the back of the line to
@@ -270,5 +301,6 @@ export function serializeItem(item, forGuestId, { threshold } = {}) {
     downvotes,
     threshold: threshold ?? null,
     myVote: forGuestId ? item.votes.get(forGuestId) || null : null,
+    duplicateReason: item.duplicateReason ?? null,
   };
 }
