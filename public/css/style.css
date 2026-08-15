@@ -163,16 +163,27 @@ input {
   align-items: center;
 }
 
+.playback-status {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  margin-top: 12px;
+}
+
 .host-controls {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .host-controls .button {
   flex: 1;
   padding: 8px 10px;
   font-size: 0.85rem;
+}
+
+.host-controls .button:disabled {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .now-playing .art,

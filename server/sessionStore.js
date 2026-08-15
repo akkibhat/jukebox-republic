@@ -39,6 +39,7 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
     nowPlaying: null, // { uri, name, artist, albumArt, durationMs, startedAt, votes, netVotes }
     skippedSongs: [], // tracks the group voted out - see addToSkippedSongs below
     playbackBlockedReason: null, // set by playbackEngine.js when Spotify can't see any device to play on
+    isPlaying: null, // true/false once known from Spotify; null until the first poll or host action reports it
   };
 
   sessions.set(id, session);

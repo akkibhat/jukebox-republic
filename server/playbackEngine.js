@@ -40,6 +40,17 @@ async function pollAndAdvance(session, io) {
   const accessToken = await ensureFreshToken(session);
   const state = await getPlaybackState(accessToken);
 
+  // Picked up here so the host controls can show "Playing"/"Paused" and
+  // grey out whichever button doesn't apply, even when the host pauses or
+  // resumes from their own Spotify app instead of cartunes' buttons. Only
+  // broadcasts when it actually changes, so an unremarkable poll tick
+  // doesn't re-send state to everyone for no reason.
+  const isPlaying = state?.isPlaying ?? null;
+  if (session.isPlaying !== isPlaying) {
+    session.isPlaying = isPlaying;
+    await broadcastState(io, session);
+  }
+
   if (!session.nowPlaying) {
     // Nothing queued up on our side yet - if the host's device is sitting
     // idle, kick off the first track in the fair queue.

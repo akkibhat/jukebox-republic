@@ -81,12 +81,12 @@ function renderState(state) {
     guestCountEl.textContent = `${state.connectedGuestCount} connected`;
   }
 
-  renderNowPlaying(state.nowPlaying, state.playbackBlockedReason);
+  renderNowPlaying(state.nowPlaying, state.playbackBlockedReason, state.isPlaying);
   renderQueue(state.queue);
   renderSkippedSongs(state.skippedSongs);
 }
 
-function renderNowPlaying(track, playbackBlockedReason) {
+function renderNowPlaying(track, playbackBlockedReason, isPlaying) {
   const container = document.getElementById('now-playing');
   if (!container) return;
 
@@ -109,7 +109,7 @@ function renderNowPlaying(track, playbackBlockedReason) {
         </div>
         ${voteButtonsHtml(track)}
       </div>
-      ${isHostView ? hostControlsHtml() : ''}
+      ${isHostView ? hostControlsHtml(isPlaying) : ''}
     </div>
   `;
 }
@@ -195,11 +195,23 @@ function skipProgressHtml(track) {
   return `<div class="skip-progress">${track.downvotes} of ${track.threshold} downvotes to skip</div>`;
 }
 
-function hostControlsHtml() {
+/**
+ * `isPlaying` is null until the first poll comes back or a host action
+ * sets it, in which case neither button is disabled - better to let a tap
+ * fail with a toast than grey out a button on a guess. Once known, the
+ * button that wouldn't do anything (Pause while already paused, Resume
+ * while already playing) is disabled rather than just left clickable and
+ * silently doing nothing.
+ */
+function hostControlsHtml(isPlaying) {
+  const statusHtml =
+    isPlaying === null ? '' : `<div class="playback-status">${isPlaying ? 'Playing' : 'Paused'}</div>`;
+
   return `
+    ${statusHtml}
     <div class="host-controls">
-      <button class="button button-secondary host-action" data-action="pause">Pause</button>
-      <button class="button button-secondary host-action" data-action="resume">Resume</button>
+      <button class="button button-secondary host-action" data-action="pause" ${isPlaying === false ? 'disabled' : ''}>Pause</button>
+      <button class="button button-secondary host-action" data-action="resume" ${isPlaying === true ? 'disabled' : ''}>Resume</button>
       <button class="button button-secondary host-action" data-action="skip">Skip</button>
     </div>
   `;

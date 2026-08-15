@@ -119,7 +119,12 @@ export function registerSocketHandlers(io) {
       try {
         const accessToken = await ensureFreshToken(session);
         await pausePlayback(accessToken);
+        // Set optimistically rather than waiting for the next poll tick
+        // (up to 4s away) to pick it up - the command already succeeded,
+        // so there's no reason the button state should lag behind it.
+        session.isPlaying = false;
         ack?.({ ok: true });
+        await broadcastState(io, session);
       } catch (err) {
         console.error('[sockets] playback:pause failed:', err.message);
         ack?.({ error: 'Could not pause. Is Spotify open on the host phone?' });
@@ -132,7 +137,9 @@ export function registerSocketHandlers(io) {
       try {
         const accessToken = await ensureFreshToken(session);
         await resumePlayback(accessToken);
+        session.isPlaying = true;
         ack?.({ ok: true });
+        await broadcastState(io, session);
       } catch (err) {
         console.error('[sockets] playback:resume failed:', err.message);
         ack?.({ error: 'Could not resume. Is Spotify open on the host phone?' });

@@ -35,6 +35,7 @@ export async function broadcastState(io, session) {
       skippedSongs: session.skippedSongs,
       connectedGuestCount: guestCount,
       playbackBlockedReason: session.playbackBlockedReason,
+      isPlaying: session.isPlaying,
     });
   }
 }
