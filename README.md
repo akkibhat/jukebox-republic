@@ -112,7 +112,7 @@ Copyright 2026 Akki Bhat. Released under the
 modify, and share it for personal, hobby, academic, or other
 noncommercial purposes.
 
-**Any commercial use needs a separate license** - get in touch first.
+**Any commercial use needs a separate license** - email license@pi.co.nz.
 Note that Spotify's own Developer Terms independently restrict
 commercializing anything built on their API, so a commercial deployment
 would need their agreement as well as this one.
