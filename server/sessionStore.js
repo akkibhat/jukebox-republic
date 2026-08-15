@@ -38,6 +38,9 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
     queue: [], // array of queue items, see addTrackToQueue below
     nowPlaying: null, // { uri, name, artist, albumArt, durationMs, startedAt, votes, netVotes }
     skippedSongs: [], // tracks the group voted out - see addToSkippedSongs below
+    playHistory: [], // rolling "recently played" log - see addToPlayHistory below
+    fallbackTracks: [], // host-curated backup picks for when the real queue runs dry
+    fallbackIndex: 0, // cycles through fallbackTracks in order rather than repeating the first one forever
     playbackBlockedReason: null, // set by playbackEngine.js when Spotify can't see any device to play on
     isPlaying: null, // true/false once known from Spotify; null until the first poll or host action reports it
   };
@@ -83,6 +86,15 @@ export function connectedGuestCount(session) {
   return count;
 }
 
+/** Names of everyone currently connected, for the "who's in the car" display. */
+export function connectedGuestNames(session) {
+  const names = [];
+  for (const guest of session.guests.values()) {
+    if (guest.connected) names.push(guest.name);
+  }
+  return names;
+}
+
 export function makeQueueItem({ track, guest, round }) {
   return {
     id: randomUUID(),
@@ -91,10 +103,36 @@ export function makeQueueItem({ track, guest, round }) {
     artist: track.artist,
     albumArt: track.albumArt,
     durationMs: track.durationMs,
+    explicit: Boolean(track.explicit),
     addedBy: { id: guest.id, name: guest.name },
     addedAt: Date.now(),
     round,
     votes: new Map(), // guestId -> 'up' | 'down'
+    netVotes: 0,
+  };
+}
+
+/**
+ * A track cartunes picked from the backup playlist rather than the real
+ * queue, shaped exactly like a normal queue item so it can be voted on,
+ * skipped, and land in history the same way anything else does. `addedBy`
+ * is a synthetic id ('fallback') that can never match a real guestId, so
+ * the self-downvote guard never accidentally blocks the room from
+ * downvoting it.
+ */
+export function makeFallbackNowPlaying(track) {
+  return {
+    id: randomUUID(),
+    uri: track.uri,
+    name: track.name,
+    artist: track.artist,
+    albumArt: track.albumArt,
+    durationMs: track.durationMs,
+    explicit: Boolean(track.explicit),
+    addedBy: { id: 'fallback', name: 'Backup playlist' },
+    addedAt: Date.now(),
+    round: 0,
+    votes: new Map(),
     netVotes: 0,
   };
 }
@@ -113,6 +151,7 @@ export function addToSkippedSongs(session, item) {
     artist: item.artist,
     albumArt: item.albumArt,
     durationMs: item.durationMs,
+    explicit: item.explicit,
     addedBy: item.addedBy,
   });
 }
@@ -120,6 +159,34 @@ export function addToSkippedSongs(session, item) {
 /** Called when a skipped track gets re-added to the queue, so it stops showing up in both places at once. */
 export function removeFromSkippedSongs(session, uri) {
   session.skippedSongs = session.skippedSongs.filter((s) => s.uri !== uri);
+}
+
+const PLAY_HISTORY_LIMIT = 25;
+
+/**
+ * Logs a track once it leaves now-playing, for the "wait, what was that
+ * song" moment - regardless of *why* it left (finished normally, host
+ * skip, or voted out). That's a deliberate difference from the skipped
+ * list: history is a permanent-ish record of what actually played, so a
+ * voted-out track re-adding itself doesn't erase that it was here once,
+ * and re-adding *from* history doesn't remove the history entry either.
+ * Capped so a long trip's history doesn't grow without bound.
+ */
+export function addToPlayHistory(session, item) {
+  session.playHistory.unshift({
+    id: item.id,
+    uri: item.uri,
+    name: item.name,
+    artist: item.artist,
+    albumArt: item.albumArt,
+    durationMs: item.durationMs,
+    explicit: item.explicit,
+    addedBy: item.addedBy,
+    playedAt: Date.now(),
+  });
+  if (session.playHistory.length > PLAY_HISTORY_LIMIT) {
+    session.playHistory.length = PLAY_HISTORY_LIMIT;
+  }
 }
 
 /**
@@ -144,6 +211,7 @@ export function serializeItem(item, forGuestId, { threshold } = {}) {
     artist: item.artist,
     albumArt: item.albumArt,
     durationMs: item.durationMs,
+    explicit: item.explicit,
     addedBy: item.addedBy,
     round: item.round,
     netVotes: item.netVotes,

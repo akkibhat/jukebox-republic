@@ -2,7 +2,7 @@
 // to everyone connected to its room. Pulled out into its own module so both
 // sockets.js (reacting to guest actions) and playbackEngine.js (reacting to
 // the clock) can push updates without importing each other.
-import { serializeItem, connectedGuestCount } from './sessionStore.js';
+import { serializeItem, connectedGuestCount, connectedGuestNames } from './sessionStore.js';
 import { sortQueue, downvoteThreshold } from './queueFairness.js';
 
 export function roomName(sessionId) {
@@ -33,7 +33,10 @@ export async function broadcastState(io, session) {
       nowPlaying: serializeItem(session.nowPlaying, guestId, { threshold }),
       queue: orderedQueue.map((item) => serializeItem(item, guestId, { threshold })),
       skippedSongs: session.skippedSongs,
+      playHistory: session.playHistory,
+      fallbackTracks: session.fallbackTracks,
       connectedGuestCount: guestCount,
+      guestNames: connectedGuestNames(session),
       playbackBlockedReason: session.playbackBlockedReason,
       isPlaying: session.isPlaying,
     });

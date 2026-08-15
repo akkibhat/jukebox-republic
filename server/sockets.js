@@ -61,6 +61,24 @@ export function registerSocketHandlers(io) {
       await broadcastState(io, session);
     });
 
+    // A guest can pull their own submission back out any time before it
+    // plays, no group vote needed - that's just changing your mind, not a
+    // democratic rejection, so it doesn't touch the skipped list either.
+    socket.on('queue:remove', async ({ itemId }, ack) => {
+      const session = getSession(socket.data.sessionId);
+      if (!session) return ack?.({ error: 'Session not found.' });
+
+      const item = session.queue.find((q) => q.id === itemId);
+      if (!item) return ack?.({ error: 'That track is no longer in the queue.' });
+      if (item.addedBy.id !== socket.data.guestId) {
+        return ack?.({ error: 'You can only remove songs you added.' });
+      }
+
+      session.queue = session.queue.filter((q) => q.id !== itemId);
+      ack?.({ ok: true });
+      await broadcastState(io, session);
+    });
+
     socket.on('queue:vote', async ({ itemId, direction }, ack) => {
       if (direction !== 'up' && direction !== 'down') {
         return ack?.({ error: 'Vote must be up or down.' });
@@ -154,6 +172,41 @@ export function registerSocketHandlers(io) {
       stopPlaybackLoop(session.id);
       endSession(session.id);
       ack?.({ ok: true });
+    });
+
+    // --- Backup playlist (host-managed) -----------------------------------
+    // Kicks in only once the real queue is empty - see tryStartNext in
+    // playbackEngine.js. Kept host-only since it's a "set it up before the
+    // trip" kind of list, not something guests are voting into.
+
+    socket.on('fallback:add', async ({ track }, ack) => {
+      const session = requireHost(socket, ack);
+      if (!session) return;
+
+      if (session.fallbackTracks.some((t) => t.uri === track.uri)) {
+        return ack?.({ error: 'That song is already in the backup playlist.' });
+      }
+
+      session.fallbackTracks.push({
+        uri: track.uri,
+        name: track.name,
+        artist: track.artist,
+        albumArt: track.albumArt,
+        durationMs: track.durationMs,
+        explicit: Boolean(track.explicit),
+      });
+
+      ack?.({ ok: true });
+      await broadcastState(io, session);
+    });
+
+    socket.on('fallback:remove', async ({ uri }, ack) => {
+      const session = requireHost(socket, ack);
+      if (!session) return;
+
+      session.fallbackTracks = session.fallbackTracks.filter((t) => t.uri !== uri);
+      ack?.({ ok: true });
+      await broadcastState(io, session);
     });
 
     socket.on('disconnect', async () => {

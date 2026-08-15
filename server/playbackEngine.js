@@ -8,7 +8,7 @@
 import { getPlaybackState, getAvailableDevices, playTrack } from './spotifyApi.js';
 import { ensureFreshToken } from './spotifyAuth.js';
 import { sortQueue } from './queueFairness.js';
-import { addToSkippedSongs } from './sessionStore.js';
+import { addToSkippedSongs, addToPlayHistory, makeFallbackNowPlaying } from './sessionStore.js';
 import { broadcastState } from './broadcast.js';
 
 const POLL_INTERVAL_MS = 4000;
@@ -53,7 +53,7 @@ async function pollAndAdvance(session, io) {
 
   if (!session.nowPlaying) {
     // Nothing queued up on our side yet - if the host's device is sitting
-    // idle, kick off the first track in the fair queue.
+    // idle, kick off the first track in the fair queue (or a backup pick).
     await tryStartNext(session, io);
     return;
   }
@@ -68,9 +68,19 @@ async function pollAndAdvance(session, io) {
   }
 }
 
+/**
+ * Picks what plays next: the fairly-ordered queue if it has anything,
+ * otherwise a cycling pick from the host's backup playlist if one's been
+ * set. Returns whether it actually got something going, so callers (and
+ * the poll loop) know whether to keep waiting or move on.
+ */
 async function tryStartNext(session, io) {
   const [next, ...rest] = sortQueue(session.queue);
-  if (!next) return;
+  const usingFallback = !next;
+  const fallbackTrack = usingFallback ? nextFallbackTrack(session) : null;
+  const trackToPlay = next || fallbackTrack;
+
+  if (!trackToPlay) return false;
 
   const accessToken = await ensureFreshToken(session);
   const deviceId = await resolveTargetDevice(accessToken);
@@ -82,15 +92,47 @@ async function tryStartNext(session, io) {
     // We'll retry automatically on the next poll tick.
     session.playbackBlockedReason = "No Spotify device found. Open Spotify on the host's phone.";
     await broadcastState(io, session);
-    return;
+    return false;
   }
 
-  await playTrack(accessToken, next.uri, deviceId);
+  try {
+    await playTrack(accessToken, trackToPlay.uri, deviceId);
+  } catch (err) {
+    // Spotify refused to start this particular track (region lock, a
+    // restriction on the device, a transient API error...). Previously
+    // this would just throw, get swallowed by the poll loop's catch, and
+    // leave the same broken track stuck at the front of the queue forever
+    // - every 4s poll would retry it and fail the same way. Instead, drop
+    // it (or move the backup playlist's cursor past it) and let the very
+    // next poll tick try whatever comes after it.
+    console.error(`[playback] session ${session.roomCode} could not start "${trackToPlay.name}":`, err.message);
+    session.playbackBlockedReason = `Spotify wouldn't start "${trackToPlay.name}" - trying the next song.`;
+    if (usingFallback) {
+      advanceFallbackIndex(session);
+    } else {
+      session.queue = rest;
+    }
+    await broadcastState(io, session);
+    return false;
+  }
 
   session.playbackBlockedReason = null;
-  session.nowPlaying = next;
+  session.nowPlaying = usingFallback ? makeFallbackNowPlaying(trackToPlay) : trackToPlay;
   session.queue = rest;
+  if (usingFallback) advanceFallbackIndex(session);
   await broadcastState(io, session);
+  return true;
+}
+
+/** The backup playlist cycles in order (not randomly) so it's predictable, looping back to the start once it runs through. */
+function nextFallbackTrack(session) {
+  if (session.fallbackTracks.length === 0) return null;
+  return session.fallbackTracks[session.fallbackIndex % session.fallbackTracks.length];
+}
+
+function advanceFallbackIndex(session) {
+  if (session.fallbackTracks.length === 0) return;
+  session.fallbackIndex = (session.fallbackIndex + 1) % session.fallbackTracks.length;
 }
 
 /**
@@ -110,21 +152,24 @@ async function resolveTargetDevice(accessToken) {
 }
 
 /**
- * Moves the current track out and starts whatever's fairly next.
- * `votedOut` distinguishes *why* it's leaving: true only when the group
- * downvoted it past the skip threshold, in which case it goes onto the
- * skipped list for anyone to bring back. A track that simply finished
- * playing, or that the host manually skipped/changed, wasn't rejected by
- * anyone - it just leaves normally, no skipped-list entry.
+ * Moves the current track out and starts whatever's fairly next. Every
+ * track that was ever nowPlaying gets logged to play history regardless of
+ * why it's leaving. `votedOut` additionally sends it to the skipped list
+ * (only when the group downvoted it past the threshold) so it can be
+ * brought back later - a track that simply finished playing, or that the
+ * host manually skipped/changed, wasn't rejected by anyone.
  */
 export async function advanceToNext(session, io, { votedOut = false } = {}) {
-  if (votedOut && session.nowPlaying) {
-    addToSkippedSongs(session, session.nowPlaying);
+  if (session.nowPlaying) {
+    addToPlayHistory(session, session.nowPlaying);
+    if (votedOut) {
+      addToSkippedSongs(session, session.nowPlaying);
+    }
   }
   session.nowPlaying = null;
   await tryStartNext(session, io);
   if (!session.nowPlaying) {
-    await broadcastState(io, session); // queue ran dry - let clients know nothing's playing
+    await broadcastState(io, session); // queue (and any backup playlist) ran dry - let clients know nothing's playing
   }
 }
 

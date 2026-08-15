@@ -142,6 +142,16 @@ input {
   font-size: 0.9rem;
 }
 
+.guest-names {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  margin-top: 2px;
+}
+
+.guest-names:empty {
+  display: none;
+}
+
 .end-trip-button {
   margin-top: 14px;
   width: 100%;
@@ -200,6 +210,20 @@ input {
 .track-artist { color: var(--text-dim); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .added-by { color: var(--text-dim); font-size: 0.78rem; margin-top: 2px; }
 .skip-progress { color: var(--danger); font-size: 0.78rem; margin-top: 2px; }
+
+.explicit-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text-dim);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  vertical-align: middle;
+}
 
 .section-title {
   color: var(--text-dim);
@@ -272,6 +296,22 @@ input {
   white-space: nowrap;
 }
 
+.remove-button {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.fallback-remove-button {
+  margin-left: auto;
+}
+
 /* --- Fixed "add a song" bar + search results --- */
 
 .add-song-bar {
@@ -326,6 +366,20 @@ input {
   height: 36px;
   font-size: 1.2rem;
   font-weight: 700;
+}
+
+/* Higher specificity than ".search-result button" above, so the backup-
+   playlist star button reads as a distinct, secondary action next to the
+   primary green "add to queue" button rather than looking like a duplicate. */
+.search-result .fallback-add-button {
+  margin-left: 0;
+  background: var(--surface-raised);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  width: 36px;
+  height: 36px;
+  font-size: 1rem;
+  font-weight: 400;
 }
 
 .name-prompt {

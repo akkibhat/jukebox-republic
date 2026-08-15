@@ -33,6 +33,7 @@ function joinByCode(code) {
     .then((info) => {
       document.getElementById('session-header').innerHTML = `
         <div class="guest-count" id="guest-count">joining&hellip;</div>
+        <div class="guest-names" id="guest-names"></div>
         <p>Riding with <strong>${escapeHtml(info.hostDisplayName)}</strong></p>
       `;
       startQueueApp(info.sessionId);

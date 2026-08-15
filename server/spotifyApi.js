@@ -45,6 +45,7 @@ function toTrackSummary(track) {
     artist: track.artists.map((a) => a.name).join(', '),
     albumArt: track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || null,
     durationMs: track.duration_ms,
+    explicit: Boolean(track.explicit),
   };
 }
 
