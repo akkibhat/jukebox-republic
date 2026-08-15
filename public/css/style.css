@@ -1,0 +1,295 @@
+/* Mobile-first on purpose - every screen here is used one-handed, in a
+   moving car, usually at night. Big tap targets, high contrast, dark
+   background so it doesn't blind the driver or the person riding shotgun. */
+
+:root {
+  --bg: #0f0f14;
+  --surface: #1b1b24;
+  --surface-raised: #24242f;
+  --border: #33333f;
+  --text: #f2f2f5;
+  --text-dim: #9a9aa8;
+  --accent: #1ed760; /* Spotify green, since this app is nothing without Spotify */
+  --accent-dim: #16994a;
+  --danger: #ff5470;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.screen {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 24px 20px 96px; /* bottom padding clears the fixed add-song bar */
+}
+
+.screen-center {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-bottom: 24px;
+}
+
+.logo {
+  font-size: 2.5rem;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.tagline {
+  color: var(--text-dim);
+  margin-top: 4px;
+  margin-bottom: 32px;
+}
+
+.card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.card label {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+input {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 1.1rem;
+  color: var(--text);
+  width: 100%;
+}
+
+.button {
+  display: block;
+  text-align: center;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 20px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.button-primary {
+  background: var(--accent);
+  color: #04170a;
+}
+
+.button-secondary {
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+/* --- Session header: room code / QR on the host screen --- */
+
+.session-header {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.room-code {
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 8px 0;
+}
+
+.session-header img {
+  width: 140px;
+  height: 140px;
+  border-radius: 10px;
+  margin-top: 8px;
+  background: white;
+  padding: 6px;
+}
+
+.guest-count {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+/* --- Now playing --- */
+
+.now-playing {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 20px;
+}
+
+.now-playing .art,
+.queue-item .art {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  background: var(--surface-raised) center/cover no-repeat;
+  flex-shrink: 0;
+}
+
+.track-info { flex: 1; min-width: 0; }
+.track-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track-artist { color: var(--text-dim); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.added-by { color: var(--text-dim); font-size: 0.78rem; margin-top: 2px; }
+
+.section-title {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 20px 0 10px;
+}
+
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.vote-buttons {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.vote-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vote-button.active-up { background: var(--accent-dim); border-color: var(--accent); }
+.vote-button.active-down { background: #4a1a26; border-color: var(--danger); }
+
+.net-votes {
+  min-width: 22px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.empty-state {
+  color: var(--text-dim);
+  text-align: center;
+  padding: 24px 0;
+}
+
+/* --- Fixed "add a song" bar + search results --- */
+
+.add-song-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+}
+
+.add-song-bar input {
+  max-width: 480px;
+  margin: 0 auto;
+  display: block;
+}
+
+.search-results {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 68px;
+  max-height: 50vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 8px 16px;
+}
+
+.search-results:empty { display: none; }
+
+.search-result {
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-result:last-child { border-bottom: none; }
+
+.search-result button {
+  margin-left: auto;
+  background: var(--accent);
+  color: #04170a;
+  border: none;
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.name-prompt {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
