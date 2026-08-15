@@ -72,6 +72,37 @@ export async function searchTracks(accessToken, query, limit = 12) {
 }
 
 /**
+ * Searches the catalog for playlists - the host's "add a playlist to the
+ * Autopilot Mix" flow. Two Development Mode realities shape this (both
+ * verified against the live API while building this app):
+ *
+ * - Search returns at most 10 results per query in Dev Mode, so there's
+ *   no point asking for more.
+ * - Spotify's own editorial/algorithmic playlists (ids starting
+ *   37i9dQZF1D) 404 when their tracks are fetched, so they're filtered
+ *   out here rather than shown as options that can't actually work.
+ *   Community/user-made playlists all read fine.
+ *
+ * Search item arrays can also contain literal nulls (a long-standing API
+ * quirk), hence the initial truthiness filter.
+ */
+export async function searchPlaylists(accessToken, query, limit = 10) {
+  const params = new URLSearchParams({ q: query, type: 'playlist', limit: String(limit) });
+  const data = await spotifyFetch(`/search?${params.toString()}`, accessToken);
+  return (data.playlists?.items || [])
+    .filter((playlist) => playlist && !playlist.id.startsWith('37i9dQZF1D'))
+    .map((playlist) => ({
+      id: playlist.id,
+      name: playlist.name,
+      owner: playlist.owner?.display_name || '',
+      trackCount: playlist.tracks?.total ?? null,
+      // Last image is the smallest rendition when several exist - plenty
+      // for a 56px thumbnail row.
+      image: playlist.images?.[playlist.images.length - 1]?.url || playlist.images?.[0]?.url || null,
+    }));
+}
+
+/**
  * Every track in a public Spotify playlist - used once per session to seed
  * the Autopilot Mix. Spotify caps a single response at 100 tracks, so this
  * pages through using the paging object's `next` link until it runs out

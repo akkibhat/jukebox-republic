@@ -34,6 +34,12 @@
         Plays automatically once the queue's empty, pulled from a mix of playlists.
         Tap + to send any of these straight into the real queue.
       </p>
+      <!-- Host-only: guests browse the mix, the host curates it. -->
+      <div class="autopilot-admin">
+        <label for="playlist-search-input">Add a playlist to the mix</label>
+        <input id="playlist-search-input" type="text" placeholder="Search playlists, or paste a Spotify link" autocomplete="off" />
+        <div class="playlist-results" id="playlist-results"></div>
+      </div>
       <div class="queue-list" id="autopilot-list"></div>
     </div>
 

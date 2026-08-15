@@ -64,6 +64,7 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
         socket.on('kicked', () => renderFatalError('The host removed you from this session.'));
 
         wireSearch(sessionId, socket);
+        wirePlaylistSearch(sessionId, socket);
         wireClicks(socket);
         wireTabs();
 
@@ -656,6 +657,88 @@ async function runSearch(sessionId, query, resultsEl, socket) {
       });
       resultsEl.innerHTML = '';
       document.getElementById('search-input').value = '';
+    });
+  });
+}
+
+// --- Autopilot Mix playlist search (host only) -----------------------------
+
+/**
+ * The Autopilot tab's "add a playlist" box. Only host.html has the
+ * elements (guests browse the mix, the host curates it), so on the guest
+ * page this wires nothing. Typing searches Spotify's playlists; pasting a
+ * playlist link or spotify:playlist: uri short-circuits search and offers
+ * to add exactly that playlist - covering anything search can't surface.
+ */
+function wirePlaylistSearch(sessionId, socket) {
+  const input = document.getElementById('playlist-search-input');
+  const results = document.getElementById('playlist-results');
+  if (!input || !results) return;
+
+  let debounceHandle;
+
+  input.addEventListener('input', () => {
+    clearTimeout(debounceHandle);
+    const query = input.value.trim();
+    if (!query) {
+      results.innerHTML = '';
+      return;
+    }
+
+    const linkMatch = query.match(/playlist[/:]([A-Za-z0-9]{10,})/);
+    if (linkMatch) {
+      renderPlaylistResults(results, input, [{ id: linkMatch[1], name: 'Playlist from your link', owner: 'tap + to add it', trackCount: null, image: null }], socket);
+      return;
+    }
+
+    debounceHandle = setTimeout(() => runPlaylistSearch(sessionId, query, results, input, socket), SEARCH_DEBOUNCE_MS);
+  });
+}
+
+async function runPlaylistSearch(sessionId, query, resultsEl, inputEl, socket) {
+  const response = await fetch(`/api/sessions/${sessionId}/playlist-search?q=${encodeURIComponent(query)}`);
+  const data = await response.json();
+  if (!data.results) return;
+  renderPlaylistResults(resultsEl, inputEl, data.results, socket);
+}
+
+function renderPlaylistResults(resultsEl, inputEl, playlists, socket) {
+  if (playlists.length === 0) {
+    resultsEl.innerHTML = '<p class="empty-state">No playlists found.</p>';
+    return;
+  }
+
+  resultsEl.innerHTML = playlists
+    .map(
+      (playlist, index) => `
+        <div class="search-result">
+          <div class="art" style="background-image: url('${playlist.image || ''}')"></div>
+          <div class="track-info">
+            <div class="track-name">${escapeHtml(playlist.name)}</div>
+            <div class="track-artist">${escapeHtml(playlist.owner)}${playlist.trackCount != null ? ` &middot; ${playlist.trackCount} tracks` : ''}</div>
+          </div>
+          <button class="add-button" data-index="${index}">+</button>
+        </div>
+      `
+    )
+    .join('');
+
+  resultsEl.querySelectorAll('.add-button').forEach((button) => {
+    button.addEventListener('click', () => {
+      const playlist = playlists[Number(button.dataset.index)];
+      // A big playlist takes a moment to page through server-side - lock
+      // the button so an impatient double-tap doesn't double-add.
+      button.disabled = true;
+      socket.emit('autopilot:addPlaylist', { playlistId: playlist.id }, (response) => {
+        if (response?.error) {
+          showToast(response.error);
+          button.disabled = false;
+          return;
+        }
+        showToast(`Added ${response.added} song${response.added === 1 ? '' : 's'} to the Autopilot Mix.`);
+        resultsEl.innerHTML = '';
+        inputEl.value = '';
+      });
     });
   });
 }

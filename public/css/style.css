@@ -607,6 +607,29 @@ input {
   margin: 20px 0 16px;
 }
 
+/* --- Host's "add a playlist to the Autopilot Mix" box --- */
+
+.autopilot-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.autopilot-admin label {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.playlist-results {
+  display: flex;
+  flex-direction: column;
+}
+
+.playlist-results:empty {
+  display: none;
+}
+
 .search-result {
   display: flex;
   align-items: center;

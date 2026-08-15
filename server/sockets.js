@@ -12,13 +12,14 @@ import {
   addToSkippedSongs,
   removeFromSkippedSongs,
   removeFromFallbackTracks,
+  addToFallbackTracks,
   endSession,
 } from './sessionStore.js';
 import { nextRoundForGuest, applyVote } from './queueFairness.js';
 import { buildSessionRecap } from './sessionRecap.js';
 import { broadcastState, roomName } from './broadcast.js';
 import { startPlaybackLoop, stopPlaybackLoop, skipCurrentTrack } from './playbackEngine.js';
-import { pausePlayback, resumePlayback, setVolume } from './spotifyApi.js';
+import { pausePlayback, resumePlayback, setVolume, getPlaylistTracks } from './spotifyApi.js';
 import { ensureFreshToken } from './spotifyAuth.js';
 
 export function registerSocketHandlers(io) {
@@ -214,6 +215,59 @@ export function registerSocketHandlers(io) {
             err.status === 403
               ? "This playback device doesn't allow volume control."
               : 'Could not change volume. Try again in a moment.',
+        });
+      }
+    });
+
+    /**
+     * Pulls an arbitrary playlist's tracks into the Autopilot Mix pool.
+     * True-host-only by design (guests shape the real queue; the fallback
+     * mix is the host's to curate). The playlist id arrives from either
+     * the host's in-app playlist search or a pasted Spotify link - both
+     * funnel through the same validation here.
+     */
+    socket.on('autopilot:addPlaylist', async ({ playlistId }, ack) => {
+      const session = requireHost(socket, ack);
+      if (!session) return;
+
+      const id = String(playlistId || '').trim();
+      if (!/^[A-Za-z0-9]+$/.test(id)) {
+        return ack?.({ error: "That doesn't look like a Spotify playlist." });
+      }
+      // Editorial/algorithmic playlists 404 on the tracks endpoint in Dev
+      // Mode (verified live) - reject up front with a useful explanation
+      // instead of a generic failure after the fetch.
+      if (id.startsWith('37i9dQZF1D')) {
+        return ack?.({ error: "Spotify's own editorial playlists can't be read by the API - pick a community-made one instead." });
+      }
+      if (session.usedSeedPlaylistIds.includes(id)) {
+        return ack?.({ error: "That playlist is already part of this session's mix." });
+      }
+
+      try {
+        const accessToken = await ensureFreshToken(session);
+        const tracks = await getPlaylistTracks(accessToken, id);
+        if (tracks.length === 0) {
+          return ack?.({ error: 'That playlist has no playable tracks.' });
+        }
+
+        const before = session.fallbackTracks.length;
+        addToFallbackTracks(session, tracks); // dedupes against what's already pooled
+        // Marked used only after a successful fetch - unlike the seed-at-
+        // login flow (which marks first so the 4s poll loop can't retry a
+        // failing fetch forever), this is a one-shot user action and a
+        // transient failure SHOULD be retryable.
+        session.usedSeedPlaylistIds.push(id);
+
+        ack?.({ ok: true, added: session.fallbackTracks.length - before });
+        await broadcastState(io, session);
+      } catch (err) {
+        console.error('[sockets] autopilot:addPlaylist failed:', err.message);
+        ack?.({
+          error:
+            err.status === 404
+              ? "Spotify couldn't find that playlist. Private playlists and editorial mixes aren't readable."
+              : 'Could not load that playlist. Try again in a moment.',
         });
       }
     });
