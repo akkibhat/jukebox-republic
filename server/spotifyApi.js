@@ -72,7 +72,7 @@ export async function searchTracks(accessToken, query, limit = 12) {
 }
 
 /**
- * Every track in a public Spotify playlist - used once per trip to seed
+ * Every track in a public Spotify playlist - used once per session to seed
  * the Autopilot Mix. Spotify caps a single response at 100 tracks, so this
  * pages through using the paging object's `next` link until it runs out
  * (which `next: null` signals). Playlists can contain local files or
@@ -126,7 +126,7 @@ export async function getPlaybackState(accessToken) {
  * speaker, desktop app...), active or not. This is distinct from the
  * device on getPlaybackState, which is only populated once something is
  * already playing/paused there - useless for starting playback from cold,
- * which is exactly what happens the moment a trip's first song is added.
+ * which is exactly what happens the moment a session's first song is added.
  * A device shows up here as soon as its Spotify app is open, whether or
  * not it's actively playing anything.
  */

@@ -1,6 +1,6 @@
 # Jukebox Republic
 
-The people's queue. One person (the driver) hosts a trip through
+The people's queue. One person (the driver) hosts a session through
 their Spotify account; everyone else in the car joins from their own phone,
 searches for songs, and votes on what plays next. Nobody can flood the queue
 with their own taste, and the group can vote a bad pick off the road.
@@ -9,7 +9,7 @@ with their own taste, and the group can vote a bad pick off the road.
 
 - **The host** is whoever's phone is plugged into the car (Android Auto,
   aux, whatever) and playing through their Spotify account. They log in once
-  with Spotify at the start of the trip; that's the only Spotify account
+  with Spotify at the start of the session; that's the only Spotify account
   needed for the whole car.
 - **Guests** open a link or scan a QR code shown on the host's screen, type
   in a name, and they're in - no account, no app install, just a phone
@@ -64,8 +64,8 @@ dash.
    npm start
    ```
 
-5. The host opens `PUBLIC_BASE_URL` and taps "I'm driving," which sends
-   them through Spotify login. Guests open the same URL and enter the trip
+5. The host opens `PUBLIC_BASE_URL` and taps "Start spinning," which sends
+   them through Spotify login. Guests open the same URL and enter the session
    code shown on the host's screen (or scan the QR code).
 
 For guests on other phones to actually reach it, the server needs to be
@@ -81,27 +81,26 @@ server/
   config.js         Environment variable loading
   spotifyAuth.js    OAuth login/token refresh for the host
   spotifyApi.js     Search + playback control calls to the Spotify Web API
-  sessionStore.js   In-memory trip/guest/queue state
+  sessionStore.js   In-memory session/guest/queue state
   queueFairness.js  The rotation + voting algorithm (read this one)
   playbackEngine.js Watches playback progress and advances the queue
   sockets.js        Real-time join/add/vote handling
   routes/           HTTP routes (Spotify login, session info, search)
 public/
-  index.html        Landing page (start a trip / join a trip)
-  host.html          Host's screen: trip code, QR, queue
+  index.html        Landing page (start a session / join a session)
+  host.html          Host's screen: session code, QR, queue
   guest.html         Guest's screen: same queue view, joined by code
   js/                Browser-side logic shared between host and guest pages
 ```
 
 ## Known limitations
 
-- State is in-memory only - restarting the server ends every active trip.
+- State is in-memory only - restarting the server ends every active session.
   Fine for a single-instance deployment; would need a shared store (Redis
   or similar) to run more than one server instance.
 - The playback engine polls Spotify every few seconds rather than reacting
   to a push event, since the Web API doesn't offer one for track-end. This
   means auto-advance has a couple seconds of slack, which is intentional -
   see `END_OF_TRACK_LEAD_MS` in `playbackEngine.js`.
-- No persistence of past trips, favorite songs, or stats. Could be worth
-  adding later if there's demand for "what did we listen to on the trip to
-  the lake."
+- No persistence of past sessions, favorite songs, or stats. Could be worth
+  adding later if there's demand for "what did we listen to last time."

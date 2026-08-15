@@ -1,6 +1,6 @@
 // The Autopilot Mix is what plays when the real queue runs dry - seeded
-// once per trip from one of these hardcoded playlists, picked at random.
-// If it runs dry mid-trip, Jukebox Republic tops up from another one not yet used
+// once per session from one of these hardcoded playlists, picked at random.
+// If it runs dry mid-session, Jukebox Republic tops up from another one not yet used
 // (see nextUnusedSeedPlaylist), so a long drive isn't limited to a single
 // playlist's worth of songs.
 const SEED_PLAYLISTS = [
@@ -9,12 +9,12 @@ const SEED_PLAYLISTS = [
   { id: '2TQ0pRHI7T41zi0tV155wW', label: 'Car Songs Roadtrip in 2026' },
 ];
 
-/** Called once per trip, right after login - the pick stays fixed for that trip rather than re-rolling mid-drive. */
+/** Called once per session, right after login - the pick stays fixed for that session rather than re-rolling partway through. */
 export function pickSeedPlaylist() {
   return SEED_PLAYLISTS[Math.floor(Math.random() * SEED_PLAYLISTS.length)];
 }
 
-/** The next playlist not already pulled from this trip, or null once every hardcoded one has been used. */
+/** The next playlist not already pulled from this session, or null once every hardcoded one has been used. */
 export function nextUnusedSeedPlaylist(usedIds) {
   return SEED_PLAYLISTS.find((p) => !usedIds.includes(p.id)) || null;
 }

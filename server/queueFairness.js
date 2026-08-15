@@ -16,7 +16,7 @@
  * means everybody's 1st pick plays before anybody's 2nd pick, everybody's
  * 2nd before anybody's 3rd, and so on - like dealing cards around a table
  * instead of handing the whole deck to one player. A friend who joins
- * halfway through the trip still gets their first song up next, ahead of
+ * halfway through the session still gets their first song up next, ahead of
  * songs 2+ from people who joined earlier.
  *
  * `round` is assigned once, at add-time, from a monotonically increasing

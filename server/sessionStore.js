@@ -1,7 +1,8 @@
-// In-memory state for every active road trip. A "session" is one car's
-// party: one host Spotify account driving playback, a room code guests join
-// with, and the shared queue. No database - sessions are meant to live for
-// the length of a drive and it's fine for them to vanish when the server
+// In-memory state for every active session. A "session" is one host's
+// playback session: one host Spotify account driving playback, a room code
+// guests join with, and the shared queue. No database - sessions are meant
+// to live for the length of a drive or a party, and it's fine for them to
+// vanish when the server
 // restarts. If Jukebox Republic ever needs to survive server restarts or run on
 // multiple instances, this is the module to swap for a Redis-backed one;
 // nothing outside this file knows or cares how sessions are stored.
@@ -40,7 +41,7 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
     skippedSongs: [], // tracks the group voted out - see addToSkippedSongs below
     playHistory: [], // rolling "recently played" log - see addToPlayHistory below
     fallbackTracks: [], // the Autopilot Mix - seeded once at login from autopilotMix.js; each track is removed once it's used (played or promoted to the queue)
-    usedSeedPlaylistIds: [], // hardcoded playlist ids already pulled from this trip - set right after seeding (routes/auth.js), grows as playbackEngine.js tops up
+    usedSeedPlaylistIds: [], // hardcoded playlist ids already pulled from this session - set right after seeding (routes/auth.js), grows as playbackEngine.js tops up
     playbackBlockedReason: null, // set by playbackEngine.js when Spotify can't see any device to play on
     isPlaying: null, // true/false once known from Spotify; null until the first poll or host action reports it
   };
@@ -208,7 +209,7 @@ export function removeFromSkippedSongs(session, uri) {
  * Called whenever a track leaves the Autopilot Mix pool for good - promoted
  * into the real queue (by anyone, from the "Add to queue" button or by
  * searching for the same song directly) or played by the autopilot cycle
- * itself. Each track is used at most once per trip rather than looping
+ * itself. Each track is used at most once per session rather than looping
  * back around.
  */
 export function removeFromFallbackTracks(session, uri) {
@@ -253,7 +254,7 @@ const PLAY_HISTORY_LIMIT = 25;
  * list: history is a permanent-ish record of what actually played, so a
  * voted-out track re-adding itself doesn't erase that it was here once,
  * and re-adding *from* history doesn't remove the history entry either.
- * Capped so a long trip's history doesn't grow without bound.
+ * Capped so a long session's history doesn't grow without bound.
  */
 export function addToPlayHistory(session, item) {
   session.playHistory.unshift({

@@ -94,7 +94,7 @@ async function pollAndAdvance(session, io) {
 
 /**
  * Picks what plays next: the fairly-ordered queue if it has anything,
- * otherwise a cycling pick from the trip's Autopilot Mix. Returns whether
+ * otherwise a cycling pick from the session's Autopilot Mix. Returns whether
  * it actually got something going, so callers (and the poll loop) know
  * whether to keep waiting or move on.
  */
@@ -107,7 +107,7 @@ async function tryStartNext(session, io) {
   if (usingFallback && session.fallbackTracks.length === 0) {
     // The chosen seed playlist ran dry - top up from the other hardcoded
     // one before giving up, rather than going silent for the rest of the
-    // trip. Needs accessToken, which is why this check happens after
+    // session. Needs accessToken, which is why this check happens after
     // fetching it above instead of staying inside nextFallbackTrack().
     await topUpAutopilotMix(session, accessToken);
   }
@@ -206,15 +206,15 @@ function classifyPlaybackError(err) {
   return 'permanent';
 }
 
-/** Autopilot Mix tracks are taken in order (not randomly) so it's predictable, and each one is used at most once per trip. */
+/** Autopilot Mix tracks are taken in order (not randomly) so it's predictable, and each one is used at most once per session. */
 function nextFallbackTrack(session) {
   return session.fallbackTracks[0] || null;
 }
 
 /**
  * Pulls in one more hardcoded seed playlist - whichever hasn't been used
- * this trip yet - once the pool's fully drained. Each playlist is only
- * ever attempted once per trip (marked used before the fetch, success or
+ * this session yet - once the pool's fully drained. Each playlist is only
+ * ever attempted once per session (marked used before the fetch, success or
  * failure), so a failing fetch doesn't get retried every 4s for the rest
  * of the drive. Once every hardcoded playlist has been used,
  * nextUnusedSeedPlaylist returns null and this becomes a cheap no-op.
@@ -238,7 +238,7 @@ async function topUpAutopilotMix(session, accessToken) {
 /**
  * Picks which Connect device to send playback to. getPlaybackState only
  * reports a device once something is already playing/paused there, which
- * is useless when starting a trip from cold - so this asks Spotify for
+ * is useless when starting a session from cold - so this asks Spotify for
  * every device it can currently see instead. Prefers one already marked
  * active, then a phone (the expected case: the driver's phone through
  * Android Auto), then whatever's left rather than refusing to play at all.

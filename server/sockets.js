@@ -24,7 +24,7 @@ export function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
     socket.on('join', async ({ sessionId, guestId, name, isHost }, ack) => {
       const session = getSession(sessionId);
-      if (!session) return ack?.({ error: 'This trip has ended or the code is wrong.' });
+      if (!session) return ack?.({ error: 'This session has ended, or the code is wrong.' });
 
       const guest = upsertGuest(session, guestId, name);
       socket.data.sessionId = sessionId;
@@ -182,7 +182,7 @@ export function registerSocketHandlers(io) {
         const accessToken = await ensureFreshToken(session);
         await pausePlayback(accessToken);
       } catch (err) {
-        // Not fatal - the trip ends either way. This is just a courtesy so
+        // Not fatal - the session ends either way. This is just a courtesy so
         // the car doesn't keep playing after everyone's done with Jukebox Republic;
         // if the host's phone is already asleep or offline, there's no
         // device to pause anyway.

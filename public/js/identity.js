@@ -1,4 +1,4 @@
-// Every phone that joins a trip gets a stable random id stashed in
+// Every phone that joins a session gets a stable random id stashed in
 // localStorage, so refreshing the page (or a spotty connection dropping and
 // reconnecting) doesn't lose your identity - it's how the fair-rotation
 // "round" counter on the server stays tied to *you* specifically rather

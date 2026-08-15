@@ -12,7 +12,7 @@ function showCodeForm() {
   const header = document.getElementById('session-header');
   header.innerHTML = `
     <form id="code-form" class="card">
-      <label for="code-input">Trip code</label>
+      <label for="code-input">Session code</label>
       <input id="code-input" autocomplete="off" autocapitalize="characters" maxlength="8" required />
       <button class="button button-primary" type="submit">Join</button>
     </form>
@@ -39,7 +39,7 @@ function joinByCode(code) {
       startQueueApp(info.sessionId);
     })
     .catch(() => {
-      document.getElementById('session-header').innerHTML = '<p>No trip found with that code.</p>';
+      document.getElementById('session-header').innerHTML = '<p>No session found with that code.</p>';
       showCodeForm();
     });
 }

@@ -31,7 +31,7 @@ apiRouter.get('/sessions/:id', async (req, res) => {
 
 apiRouter.get('/sessions/by-code/:roomCode', (req, res) => {
   const session = getSessionByRoomCode(req.params.roomCode);
-  if (!session) return res.status(404).json({ error: 'No trip found with that code.' });
+  if (!session) return res.status(404).json({ error: 'No session found with that code.' });
   res.json({ sessionId: session.id, roomCode: session.roomCode, hostDisplayName: session.host.displayName });
 });
 

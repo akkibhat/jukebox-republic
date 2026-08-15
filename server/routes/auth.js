@@ -42,10 +42,10 @@ authRouter.get('/callback', async (req, res) => {
       tokens,
     });
 
-    // Seeded once, right at trip start, rather than on-demand the first
-    // time the queue runs dry - that would add a delay right when the car
+    // Seeded once, right at session start, rather than on-demand the first
+    // time the queue runs dry - that would add a delay right when everyone
     // wants music. Not fatal if it fails (rate limit, a since-deleted
-    // playlist) - the trip still starts fine, just without an Autopilot
+    // playlist) - the session still starts fine, just without an Autopilot
     // Mix ready until someone adds a real song.
     const seedPlaylist = pickSeedPlaylist();
     session.usedSeedPlaylistIds.push(seedPlaylist.id);

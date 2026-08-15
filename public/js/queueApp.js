@@ -22,7 +22,7 @@ const readdCaches = { 'autopilot-list': [], 'skipped-list': [], 'history-list': 
 /**
  * Joins the session and wires up the whole real-time UI. Returns a promise
  * that resolves with the connected socket once the join succeeds, so a
- * caller (host.js, for the "End trip" button) can piggyback host-only
+ * caller (host.js, for the "Stop spinning" button) can piggyback host-only
  * actions onto the same connection instead of opening a second one.
  */
 export function startQueueApp(sessionId, { isHost = false } = {}) {
@@ -45,7 +45,7 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
         });
 
         socket.on('state', renderState);
-        socket.on('session:ended', renderTripEnded);
+        socket.on('session:ended', renderSessionEnded);
 
         wireSearch(sessionId, socket);
         wireClicks(socket);
@@ -103,7 +103,7 @@ function renderNowPlaying(track, playbackBlockedReason, isPlaying) {
   if (!track) {
     container.innerHTML = playbackBlockedReason
       ? `<p class="empty-state empty-state-warning">${escapeHtml(playbackBlockedReason)}</p>`
-      : `<p class="empty-state">Nothing playing yet - add a song to get the trip started.</p>`;
+      : `<p class="empty-state">Nothing playing yet - add a song to get things spinning.</p>`;
     return;
   }
 
@@ -266,7 +266,7 @@ function renderFatalError(message) {
   document.body.innerHTML = `<main class="screen screen-center"><p>${escapeHtml(message)}</p><a class="button button-secondary" href="/">Back home</a></main>`;
 }
 
-function renderTripEnded() {
+function renderSessionEnded() {
   document.body.innerHTML = `
     <main class="screen screen-center">
       <svg class="logo-mark" viewBox="0 0 100 100">
@@ -280,7 +280,7 @@ function renderTripEnded() {
       </svg>
       <h1 class="logo">Jukebox Republic</h1>
       <div class="logo-rule"></div>
-      <p>This trip has ended. Thanks for riding along.</p>
+      <p>The jukebox has stopped. Thanks for listening.</p>
       <a class="button button-secondary" href="/">Back home</a>
     </main>
   `;
