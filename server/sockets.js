@@ -429,7 +429,8 @@ export function registerSocketHandlers(io) {
       // The recap has to be built (and sent) before endSession wipes the
       // state it's computed from - clients render it after the fact from
       // this payload alone.
-      io.in(roomName(session.id)).emit('session:ended', buildSessionRecap(session));
+      const room = roomName(session.id);
+      io.in(room).emit('session:ended', buildSessionRecap(session));
       stopPlaybackLoop(session.id);
       // Nobody's pending grace timer should fire against a session that's
       // about to be deleted - it would try to write a since-removed
@@ -437,6 +438,11 @@ export function registerSocketHandlers(io) {
       for (const guestId of session.guests.keys()) cancelPendingDisconnect(session.id, guestId);
       endSession(session.id);
       ack?.({ ok: true });
+      // Force every socket (guests and the host) off the room now that the
+      // session is gone - an idle open socket would otherwise keep sitting
+      // there with nothing to do, and on Cloud Run it'd count as an active
+      // connection keeping the instance from scaling to zero.
+      io.in(room).disconnectSockets(true);
     });
 
     socket.on('disconnect', () => {

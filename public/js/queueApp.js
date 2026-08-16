@@ -34,6 +34,14 @@ const readdCaches = { 'autopilot-list': [], 'skipped-list': [], 'history-list': 
 // timestamp) sidesteps clock skew between phones entirely.
 let progressAnchor = null;
 
+// Set once the session ends (either this client ended it, or the host did)
+// so the disconnect handler below can tell a normal end-of-session hangup
+// apart from a real dropout - without this, the forced disconnect the
+// server sends on session:end would trigger the same "Offline -
+// reconnecting…" banner as driving through a dead zone, and Socket.io
+// would keep retrying a session that no longer exists.
+let sessionEnded = false;
+
 /**
  * Joins the session and wires up the whole real-time UI. Returns a promise
  * that resolves with the connected socket once the join succeeds, so a
@@ -67,12 +75,22 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
         // Long outages are normal on the roads this gets used on, so say
         // so plainly instead of leaving a frozen UI that looks broken.
         // Socket.io retries on its own, indefinitely, with backoff.
-        socket.on('disconnect', () => setConnectionBanner('Offline - reconnecting…'));
-        socket.io.on('reconnect_attempt', () => setConnectionBanner('Offline - reconnecting…'));
+        socket.on('disconnect', () => {
+          if (sessionEnded) return;
+          setConnectionBanner('Offline - reconnecting…');
+        });
+        socket.io.on('reconnect_attempt', () => {
+          if (sessionEnded) return;
+          setConnectionBanner('Offline - reconnecting…');
+        });
 
         socket.on('state', renderState);
         socket.on('progress', updateProgress);
-        socket.on('session:ended', renderSessionEnded);
+        socket.on('session:ended', (recap) => {
+          sessionEnded = true;
+          socket.io.reconnection(false); // the room is gone - stop retrying against it
+          renderSessionEnded(recap);
+        });
         socket.on('kicked', () => renderFatalError('The host removed you from this session.'));
 
         wireSearch(sessionId, socket);
