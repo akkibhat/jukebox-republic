@@ -254,9 +254,27 @@ input {
   justify-content: center;
 }
 
+.kick-button {
+  /* Long-pressing this button is a deliberate gesture, not a request to
+     select text or scroll - stop the browser from treating it as either. */
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .chip-action .icon {
   width: 12px;
   height: 12px;
+}
+
+/* Shown while a kick-button hold is building toward the long-press
+   threshold, so a host can feel the escalation from "mark as left" to
+   the harder, banning kick before they reach it. */
+.kick-button-pressing {
+  background: var(--danger, #c0392b);
+  border-color: var(--danger, #c0392b);
+  color: #fff;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .guest-names:empty {

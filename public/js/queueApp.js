@@ -200,7 +200,7 @@ function renderGuestChips(guests) {
           : '';
       const kick =
         havePowers && !isMe
-          ? `<button class="chip-action kick-button" data-guest-id="${guest.id}" data-guest-name="${escapeHtml(guest.name)}" title="Remove from session">${iconHtml('x')}</button>`
+          ? `<button class="chip-action kick-button" data-guest-id="${guest.id}" data-guest-name="${escapeHtml(guest.name)}" title="Tap to mark as left - hold to remove and ban">${iconHtml('leave')}</button>`
           : '';
       return `<span class="guest-chip">${escapeHtml(guest.name)}${isMe ? ' (you)' : ''}${badge}${promote}${kick}</span>`;
     })
@@ -580,12 +580,55 @@ function recapRowHtml(icon, label, main, sub) {
 
 // --- Interactions ---------------------------------------------------------
 
+// Long-press state for the guest chip's remove/kick button. A tap marks a
+// guest as gone-for-now (reversible, no ban); holding it down escalates to
+// the permanent, banning kick. Both live on the same button so there's only
+// one control to find on a crowded chip row.
+const KICK_LONG_PRESS_MS = 550;
+let kickPressTimer = null;
+let kickLongPressFired = false;
+
 /** Routes every button tap in the app to its socket event. */
 function wireClicks(socket) {
   // Delegated listener on the whole document: now-playing, queue-list, and
   // the read-only lists all get replaced wholesale on every state update,
   // so binding directly to buttons would mean re-binding after every
   // render. One listener up top avoids that entirely.
+
+  // pointerdown/up rather than mousedown/touchstart: one pair covers mouse,
+  // touch, and pen without duplicating the timer logic per input type.
+  document.addEventListener('pointerdown', (event) => {
+    const kickButton = event.target.closest('.kick-button');
+    if (!kickButton) return;
+    kickLongPressFired = false;
+    kickButton.classList.add('kick-button-pressing');
+    kickPressTimer = setTimeout(() => {
+      kickLongPressFired = true;
+      kickButton.classList.remove('kick-button-pressing');
+      if (confirm(`Remove ${kickButton.dataset.guestName} from the session? They won't be able to rejoin.`)) {
+        socket.emit('guest:kick', { guestId: kickButton.dataset.guestId }, ackToast);
+      }
+    }, KICK_LONG_PRESS_MS);
+  });
+
+  // Releasing early (a normal tap) or dragging off the button both cancel
+  // the pending kick - only a held-down press should ever reach it.
+  const cancelKickPress = (event) => {
+    const kickButton = event.target.closest('.kick-button');
+    kickButton?.classList.remove('kick-button-pressing');
+    clearTimeout(kickPressTimer);
+  };
+  document.addEventListener('pointerup', cancelKickPress);
+  document.addEventListener('pointerleave', cancelKickPress, true);
+  document.addEventListener('pointercancel', cancelKickPress);
+
+  // Phones treat a held-down touch as "show the context menu" by default,
+  // which would pop up over our own long-press action. Suppress it only on
+  // this button.
+  document.addEventListener('contextmenu', (event) => {
+    if (event.target.closest('.kick-button')) event.preventDefault();
+  });
+
   document.addEventListener('click', (event) => {
     const voteButton = event.target.closest('.vote-button');
     if (voteButton) {
@@ -612,8 +655,15 @@ function wireClicks(socket) {
 
     const kickButton = event.target.closest('.kick-button');
     if (kickButton) {
-      if (!confirm(`Remove ${kickButton.dataset.guestName} from the session? They won't be able to rejoin.`)) return;
-      socket.emit('guest:kick', { guestId: kickButton.dataset.guestId }, ackToast);
+      // The long-press handler above already handled this press and fired
+      // the (harder, banning) kick - don't also run the tap action for the
+      // click event that follows it.
+      if (kickLongPressFired) {
+        kickLongPressFired = false;
+        return;
+      }
+      if (!confirm(`Mark ${kickButton.dataset.guestName} as left? They can rejoin anytime if they come back.`)) return;
+      socket.emit('guest:remove', { guestId: kickButton.dataset.guestId }, ackToast);
       return;
     }
 

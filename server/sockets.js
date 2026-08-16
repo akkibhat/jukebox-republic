@@ -22,6 +22,52 @@ import { startPlaybackLoop, stopPlaybackLoop, skipCurrentTrack } from './playbac
 import { pausePlayback, resumePlayback, setVolume, getPlaylistTracks } from './spotifyApi.js';
 import { ensureFreshToken } from './spotifyAuth.js';
 
+// How long a guest whose socket disconnects still counts as "connected" -
+// and so still counts toward the downvote threshold and the guest list -
+// before we give up on them. Long enough that someone at a party who's
+// off eating, chatting, or just on their phone for other reasons doesn't
+// silently drop out of the vote the moment their screen locks (which
+// kills the connection well before they'd notice or think to reconnect).
+// If they reconnect within the window - the ordinary "closed the tab,
+// opened it again" case - nothing about the count ever visibly changes
+// for anyone else. This deliberately does NOT try to solve a real dead
+// zone (see the 20-minute idle-poll grace in playbackEngine.js for that
+// - a different problem, since there the guest's OWN experience is what
+// matters, not everyone else's vote threshold) - it's sized for "went
+// quiet at a gathering", not "lost signal for a while".
+const GUEST_GRACE_PERIOD_MS = 30 * 60 * 1000; // 30 min
+
+// sessionId:guestId -> pending setTimeout handle. Kept outside the
+// session object (like playbackEngine.js's own loop handles) since a
+// Timeout isn't something Firestore can serialize - it would break
+// persistence for any session with a currently-grace-period guest.
+const pendingDisconnects = new Map();
+
+/** Cancels a guest's pending "give up on them" timer, if one is running - called the moment they're confirmed gone for a real reason (they reconnected, or the session ended). */
+function cancelPendingDisconnect(sessionId, guestId) {
+  const key = `${sessionId}:${guestId}`;
+  clearTimeout(pendingDisconnects.get(key));
+  pendingDisconnects.delete(key);
+}
+
+/**
+ * Drops a guest from the live count - not banned, so if they reconnect
+ * later upsertGuest welcomes them back exactly like any other rejoin.
+ * Shared by three triggers that all ultimately do the same thing: the
+ * disconnect grace timer expiring on its own, a kick, and the host's
+ * manual "mark as left" action doing immediately what the grace timer
+ * would eventually do anyway. Errors are swallowed here (logged, not
+ * thrown) so every call site can fire this without its own try/catch -
+ * safe to call without awaiting, though callers already in an async
+ * context can await it for cleaner sequencing.
+ */
+function dropGuest(io, session, guest) {
+  guest.connected = false;
+  return broadcastState(io, session).catch((err) => {
+    console.error(`[sockets] broadcast after dropping guest ${guest.id} failed:`, err.message);
+  });
+}
+
 /** Wires up every real-time event a connected phone can send. Called once at startup. */
 export function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
@@ -31,6 +77,10 @@ export function registerSocketHandlers(io) {
       if (session.bannedGuestIds.has(guestId)) {
         return ack?.({ error: 'The host removed you from this session.' });
       }
+
+      // They're back - if a grace-period timer was counting down from an
+      // earlier disconnect, it no longer applies.
+      cancelPendingDisconnect(sessionId, guestId);
 
       const guest = upsertGuest(session, guestId, name);
       socket.data.sessionId = sessionId;
@@ -255,12 +305,43 @@ export function registerSocketHandlers(io) {
     // --- Moderation ------------------------------------------------------
 
     /**
-     * Kicking bans the guest id and drops every connection it has open.
-     * Their already-queued songs stay (the user's call: the music was
-     * presumably fine, the person was the problem), and history keeps
-     * their name. Soft by design - a determined kicked guest can clear
-     * localStorage for a fresh id, but this is moderation for a car full
-     * of friends, not an adversarial system.
+     * The graceful case - "they've left the party" - not a moderation
+     * action, just doing right now what their disconnect grace timer
+     * would eventually do on its own. Not banned: if they reconnect
+     * later they're welcomed back like anyone else. Deliberately doesn't
+     * touch their live socket even if it's technically still open -
+     * forcing a disconnect would just trigger their own client's
+     * automatic reconnect and silently undo this, since join has no
+     * reason to refuse them. For the "actually needs to be kept out"
+     * case, see guest:kick below.
+     */
+    socket.on('guest:remove', async ({ guestId }, ack) => {
+      const session = requirePermission(socket, ack, 'coHost');
+      if (!session) return;
+
+      const target = session.guests.get(guestId);
+      if (!target) return ack?.({ error: 'That guest is not in this session.' });
+      if (guestId === socket.data.guestId) return ack?.({ error: "You can't remove yourself." });
+
+      const sockets = await io.in(roomName(session.id)).fetchSockets();
+      if (sockets.some((s) => s.data.guestId === guestId && s.data.isHost)) {
+        return ack?.({ error: "You can't remove the host." });
+      }
+
+      cancelPendingDisconnect(session.id, guestId); // this supersedes any timer already counting down for them
+      ack?.({ ok: true });
+      await dropGuest(io, session, target);
+    });
+
+    /**
+     * Kicking bans the guest id and drops every connection it has open -
+     * for someone who actually needs to be kept out, not just marked as
+     * having left (see guest:remove above for that). Their already-
+     * queued songs stay (the user's call: the music was presumably fine,
+     * the person was the problem), and history keeps their name. Soft by
+     * design - a determined kicked guest can clear localStorage for a
+     * fresh id, but this is moderation for a car full of friends, not an
+     * adversarial system.
      */
     socket.on('guest:kick', async ({ guestId }, ack) => {
       const session = requirePermission(socket, ack, 'coHost');
@@ -278,14 +359,13 @@ export function registerSocketHandlers(io) {
 
       session.bannedGuestIds.add(guestId);
       session.coHostIds.delete(guestId); // a kicked co-host loses their powers too
-      target.connected = false;
       for (const s of targetSockets) {
         s.emit('kicked'); // tell them why before the connection drops, so their screen can say so
         s.disconnect(true);
       }
 
       ack?.({ ok: true });
-      await broadcastState(io, session);
+      await dropGuest(io, session, target);
     });
 
     /**
@@ -328,16 +408,43 @@ export function registerSocketHandlers(io) {
       // this payload alone.
       io.in(roomName(session.id)).emit('session:ended', buildSessionRecap(session));
       stopPlaybackLoop(session.id);
+      // Nobody's pending grace timer should fire against a session that's
+      // about to be deleted - it would try to write a since-removed
+      // session back into Firestore.
+      for (const guestId of session.guests.keys()) cancelPendingDisconnect(session.id, guestId);
       endSession(session.id);
       ack?.({ ok: true });
     });
 
-    socket.on('disconnect', async () => {
+    socket.on('disconnect', () => {
       const session = getSession(socket.data.sessionId);
       if (!session) return;
       const guest = session.guests.get(socket.data.guestId);
-      if (guest) guest.connected = false;
-      await broadcastState(io, session);
+      if (!guest) return;
+
+      // A banned guest can't legitimately reconnect (join rejects them
+      // outright), so there's nothing to wait for - drop them for real
+      // immediately rather than scheduling a pointless grace timer. This
+      // also covers a kick's own disconnect(), which fires this same
+      // handler on the target's socket.
+      if (session.bannedGuestIds.has(guest.id)) {
+        dropGuest(io, session, guest);
+        return;
+      }
+
+      // Otherwise, give them GUEST_GRACE_PERIOD_MS to come back before
+      // actually dropping them from the count - see the constant's
+      // comment for why. Nothing broadcasts yet: as far as everyone
+      // else's screen is concerned, nothing has changed until this
+      // timer actually fires.
+      const key = `${session.id}:${guest.id}`;
+      pendingDisconnects.set(
+        key,
+        setTimeout(() => {
+          pendingDisconnects.delete(key);
+          dropGuest(io, session, guest);
+        }, GUEST_GRACE_PERIOD_MS)
+      );
     });
   });
 }
