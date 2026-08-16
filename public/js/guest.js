@@ -1,4 +1,4 @@
-import { startQueueApp, showToast, escapeHtml } from './queueApp.js';
+import { startQueueApp, escapeHtml, wireInviteButton } from './queueApp.js';
 import { fetchJson } from './api.js';
 
 const codeFromUrl = new URLSearchParams(window.location.search).get('code');
@@ -42,49 +42,15 @@ function joinByCode(code) {
           <button class="button button-secondary invite-button" id="invite-button" type="button">Invite</button>
         </div>
       `;
-      wireInvite(info.roomCode);
+      // Built from the current origin rather than the server's configured
+      // base URL: this page loaded from that origin, so it's known to
+      // work for whoever's standing next to you.
+      const joinUrl = `${window.location.origin}/guest.html?code=${encodeURIComponent(info.roomCode)}`;
+      wireInviteButton(document.getElementById('invite-button'), joinUrl, info.roomCode);
       startQueueApp(info.sessionId);
     })
     .catch(() => {
       document.getElementById('session-header').innerHTML = '<p>No session found with that code.</p>';
       showCodeForm();
     });
-}
-
-/**
- * Hands the join link to whatever the phone offers: the native share
- * sheet first (the one-tap path at a party), then the clipboard. Both
- * need a secure context, so if neither is available the link is shown in
- * a toast for reading aloud - the code is on screen regardless.
- *
- * The link is built from the current origin rather than the server's
- * configured base URL: this page loaded from that origin, so it's known
- * to work for whoever's standing next to you.
- */
-function wireInvite(roomCode) {
-  const button = document.getElementById('invite-button');
-  if (!button) return;
-
-  const joinUrl = `${window.location.origin}/guest.html?code=${encodeURIComponent(roomCode)}`;
-
-  button.addEventListener('click', async () => {
-    const share = { title: 'Jukebox Republic', text: `Join the queue - code ${roomCode}`, url: joinUrl };
-
-    if (navigator.share) {
-      // A cancelled share sheet rejects; that's a normal choice, not an error.
-      try {
-        await navigator.share(share);
-        return;
-      } catch {
-        return;
-      }
-    }
-
-    try {
-      await navigator.clipboard.writeText(joinUrl);
-      showToast('Join link copied.');
-    } catch {
-      showToast(joinUrl);
-    }
-  });
 }

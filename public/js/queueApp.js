@@ -946,6 +946,39 @@ export function ackToast(response) {
   if (response?.error) showToast(response.error);
 }
 
+/**
+ * Wires a button to hand off a join link: the native share sheet first
+ * (one tap at a party - lets someone drop it straight into a group chat),
+ * clipboard next, and a toast with the raw link as a last resort for
+ * browsers with neither. Shared between host.js (the host's own invite
+ * button) and guest.js (a guest recruiting more people) since the
+ * behavior is identical either way.
+ */
+export function wireInviteButton(button, joinUrl, roomCode) {
+  if (!button) return;
+
+  button.addEventListener('click', async () => {
+    const share = { title: 'Jukebox Republic', text: `Join the queue - code ${roomCode}`, url: joinUrl };
+
+    if (navigator.share) {
+      // A cancelled share sheet rejects; that's a normal choice, not an error.
+      try {
+        await navigator.share(share);
+        return;
+      } catch {
+        return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(joinUrl);
+      showToast('Join link copied.');
+    } catch {
+      showToast(joinUrl);
+    }
+  });
+}
+
 let toastTimer;
 /** Brief, non-blocking error message (duplicate song, self-downvote, host-only action, etc). Exported so host.js can reuse it for its own controls. */
 export function showToast(message) {

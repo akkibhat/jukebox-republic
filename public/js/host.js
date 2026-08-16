@@ -1,4 +1,4 @@
-import { startQueueApp, ackToast, escapeHtml, showToast } from './queueApp.js';
+import { startQueueApp, ackToast, escapeHtml, showToast, wireInviteButton } from './queueApp.js';
 import { fetchJson } from './api.js';
 
 /**
@@ -97,7 +97,10 @@ if (!sessionId) {
         <div class="guest-count" id="guest-count">${info.connectedGuestCount} connected</div>
         <div class="guest-names" id="guest-names"></div>
         <div class="room-code">${info.roomCode}</div>
-        <p>Have friends scan this or go to <strong>${new URL(info.joinUrl).host}</strong> and enter the code.</p>
+        <div class="invite-row">
+          <button class="button button-secondary invite-button" id="invite-button" type="button">Share invite link</button>
+        </div>
+        <p>Or scan the QR, or go to <strong>${new URL(info.joinUrl).host}</strong> and enter the code.</p>
         <img id="qr-code" src="${info.qrCodeDataUrl}" alt="QR code to join the spin" />
         <div class="volume-row" id="volume-row">
           <div class="volume-controls" id="volume-controls">
@@ -113,6 +116,7 @@ if (!sessionId) {
         <button class="button button-secondary end-session-button" id="end-session-button" type="button">Stop spinning</button>
       `;
       embedLogoInQrCode();
+      wireInviteButton(document.getElementById('invite-button'), info.joinUrl, info.roomCode);
       return startQueueApp(sessionId, { isHost: true });
     })
     .then((socket) => {
