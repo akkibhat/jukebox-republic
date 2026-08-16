@@ -1,8 +1,9 @@
 // Pushes session state to everyone in a room. Its own module so both
 // sockets.js (reacting to guest actions) and playbackEngine.js (reacting to
 // the clock) can broadcast without importing each other.
-import { serializeItem, connectedGuestCount, connectedGuests } from './sessionStore.js';
+import { serializeItem, connectedGuests } from './sessionStore.js';
 import { sortQueue, downvoteThreshold } from './queueFairness.js';
+import { findGoldenRecord } from './goldenRecord.js';
 import { schedulePersist } from './persistence.js';
 
 /** Socket.io room name for a session. */
@@ -11,35 +12,37 @@ export function roomName(sessionId) {
 }
 
 /**
- * Sends the current state to every connected socket in the session.
+ * Sends the current state to every connected socket in the session, and
+ * mirrors it to Firestore. This is the one place a Firestore write can
+ * happen, since it's the one place every meaningful state change flows
+ * through - for the periodic cosmetic progress tick, where nothing here
+ * has actually changed, use broadcastProgress instead.
  *
  * Two things vary per recipient - which vote they cast, and whether they
  * hold host powers - so each socket gets its own payload. Everything else
  * is serialized once up front and shared by reference, since recounting
  * votes per socket would repeat identical work for every phone in the room.
- *
- * Pass `persist: false` for cosmetic broadcasts (the periodic progress
- * re-anchor) so they don't each cost a Firestore write - nothing worth
- * saving has changed, and playback position is re-read from Spotify on
- * restore anyway.
  */
-export async function broadcastState(io, session, { persist = true } = {}) {
-  const guestCount = connectedGuestCount(session);
+export async function broadcastState(io, session) {
+  const guests = connectedGuests(session);
   // Recomputed per broadcast, not per vote: the threshold moves as people
   // join and leave, so "X of Y to skip" should reflect who's here now.
-  const threshold = downvoteThreshold(guestCount);
+  const threshold = downvoteThreshold(guests.length);
 
   const shared = {
     roomCode: session.roomCode,
     skippedSongs: session.skippedSongs,
     playHistory: session.playHistory,
     fallbackTracks: session.fallbackTracks,
-    connectedGuestCount: guestCount,
-    guests: connectedGuests(session),
+    connectedGuestCount: guests.length,
+    guests,
     playbackBlockedReason: session.playbackBlockedReason,
     isPlaying: session.isPlaying,
     progressMs: session.progressMs,
     queueMode: session.queueMode,
+    // Computed once per broadcast rather than by every client re-scanning
+    // playHistory on every render - see goldenRecord.js for the rule.
+    goldenRecordId: findGoldenRecord(session.playHistory)?.id ?? null,
   };
 
   // Serialized once, then personalized per socket below. Each entry keeps a
@@ -67,9 +70,23 @@ export async function broadcastState(io, session, { persist = true } = {}) {
     });
   }
 
-  // Every meaningful state change flows through here, making this the one
-  // place that needs to mirror the session to Firestore.
-  if (persist) schedulePersist(session);
+  schedulePersist(session);
+}
+
+/**
+ * A lightweight alternative to broadcastState for the periodic progress
+ * re-anchor, where only the playback position moved. Sending the full
+ * state - re-sorting the queue, re-serializing every track, personalizing
+ * per socket - to move a number the client already interpolates locally
+ * was pure waste; this sends just the two fields that changed, and never
+ * touches Firestore (nothing persistable happens between real state
+ * changes, which all still go through broadcastState above).
+ */
+export async function broadcastProgress(io, session) {
+  io.in(roomName(session.id)).emit('progress', {
+    progressMs: session.progressMs,
+    isPlaying: session.isPlaying,
+  });
 }
 
 /** This guest's vote on a track, or null if they haven't voted. */

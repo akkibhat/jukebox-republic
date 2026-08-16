@@ -137,7 +137,7 @@ export function registerSocketHandlers(io) {
     // the "let my passenger manage the stereo" case.
 
     socket.on('playback:skip', async (_payload, ack) => {
-      const session = requireHostPowers(socket, ack);
+      const session = requirePermission(socket, ack, 'coHost');
       if (!session) return;
       try {
         await skipCurrentTrack(session, io);
@@ -149,13 +149,13 @@ export function registerSocketHandlers(io) {
     });
 
     socket.on('playback:pause', async (_payload, ack) => {
-      const session = requireHostPowers(socket, ack);
+      const session = requirePermission(socket, ack, 'coHost');
       if (!session) return;
       await runPlaybackCommand(session, io, ack, { verb: 'pause', call: pausePlayback, isPlayingAfter: false });
     });
 
     socket.on('playback:resume', async (_payload, ack) => {
-      const session = requireHostPowers(socket, ack);
+      const session = requirePermission(socket, ack, 'coHost');
       if (!session) return;
       await runPlaybackCommand(session, io, ack, { verb: 'resume', call: resumePlayback, isPlayingAfter: true });
     });
@@ -164,7 +164,7 @@ export function registerSocketHandlers(io) {
     // like the playback overrides - the group votes on songs, but the host
     // picks which voting system is in effect.
     socket.on('queue:mode', async ({ mode }, ack) => {
-      const session = requireHost(socket, ack);
+      const session = requirePermission(socket, ack, 'host');
       if (!session) return;
       if (mode !== 'fair' && mode !== 'crowd') return ack?.({ error: 'Unknown queue mode.' });
 
@@ -174,7 +174,7 @@ export function registerSocketHandlers(io) {
     });
 
     socket.on('playback:volume', async ({ percent }, ack) => {
-      const session = requireHost(socket, ack);
+      const session = requirePermission(socket, ack, 'host');
       if (!session) return;
 
       const requested = Number(percent);
@@ -207,7 +207,7 @@ export function registerSocketHandlers(io) {
      * funnel through the same validation here.
      */
     socket.on('autopilot:addPlaylist', async ({ playlistId }, ack) => {
-      const session = requireHost(socket, ack);
+      const session = requirePermission(socket, ack, 'host');
       if (!session) return;
 
       const id = String(playlistId || '').trim();
@@ -263,7 +263,7 @@ export function registerSocketHandlers(io) {
      * of friends, not an adversarial system.
      */
     socket.on('guest:kick', async ({ guestId }, ack) => {
-      const session = requireHostPowers(socket, ack);
+      const session = requirePermission(socket, ack, 'coHost');
       if (!session) return;
 
       const target = session.guests.get(guestId);
@@ -295,7 +295,7 @@ export function registerSocketHandlers(io) {
      * way; this only shares the control buttons.
      */
     socket.on('cohost:set', async ({ guestId, promote }, ack) => {
-      const session = requireHost(socket, ack);
+      const session = requirePermission(socket, ack, 'host');
       if (!session) return;
 
       const target = session.guests.get(guestId);
@@ -309,7 +309,7 @@ export function registerSocketHandlers(io) {
     });
 
     socket.on('session:end', async (_payload, ack) => {
-      const session = requireHostPowers(socket, ack);
+      const session = requirePermission(socket, ack, 'coHost');
       if (!session) return;
 
       try {
@@ -362,33 +362,33 @@ async function runPlaybackCommand(session, io, ack, { verb, call, isPlayingAfter
   }
 }
 
-/** Looks up the caller's session and confirms they're the true host, acking an error and returning null if not. For powers a co-host shares, use requireHostPowers instead. */
-function requireHost(socket, ack) {
+/**
+ * Looks up the caller's session and confirms they hold at least `level`,
+ * acking a specific error and returning null if not.
+ *
+ * - `'host'`: the true host only. For anything that changes who holds
+ *   power (cohost:set), the session's rules (queue:mode), or the host's
+ *   own device (playback:volume) - a co-host shouldn't be able to grant
+ *   itself more power or change the rules everyone else agreed to.
+ * - `'coHost'`: the host OR a promoted co-host. For powers that are
+ *   already granted and just get shared (pause/resume/skip/kick/end) -
+ *   the "let my passenger manage the stereo" case.
+ */
+function requirePermission(socket, ack, level) {
   const session = getSession(socket.data.sessionId);
   if (!session) {
     ack?.({ error: 'Session not found.' });
     return null;
   }
-  if (!socket.data.isHost) {
+
+  const isHost = socket.data.isHost;
+  const isCoHost = session.coHostIds.has(socket.data.guestId);
+
+  if (level === 'host' && !isHost) {
     ack?.({ error: 'Only the host can do that.' });
     return null;
   }
-  return session;
-}
-
-/**
- * Like requireHost, but also satisfied by a promoted co-host. Guards the
- * shared powers (pause/resume/skip/kick/end); what stays true-host-only is
- * anything that changes who holds power (cohost:set), the session's rules
- * (queue:mode), or the host's own device (playback:volume).
- */
-function requireHostPowers(socket, ack) {
-  const session = getSession(socket.data.sessionId);
-  if (!session) {
-    ack?.({ error: 'Session not found.' });
-    return null;
-  }
-  if (!socket.data.isHost && !session.coHostIds.has(socket.data.guestId)) {
+  if (level === 'coHost' && !isHost && !isCoHost) {
     ack?.({ error: 'Only the host or a co-host can do that.' });
     return null;
   }

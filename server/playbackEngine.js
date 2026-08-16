@@ -12,14 +12,14 @@ import { nextUnusedSeedPlaylist } from './autopilotMix.js';
 import {
   addToSkippedSongs,
   addToPlayHistory,
-  makeFallbackNowPlaying,
-  makeExternalNowPlaying,
+  makeSyntheticNowPlaying,
   removeFromFallbackTracks,
   moveFallbackTrackToEnd,
   addToFallbackTracks,
   connectedGuestCount,
 } from './sessionStore.js';
-import { broadcastState } from './broadcast.js';
+import { FALLBACK_CONTRIBUTOR, EXTERNAL_CONTRIBUTOR } from './syntheticContributors.js';
+import { broadcastState, broadcastProgress } from './broadcast.js';
 
 const POLL_INTERVAL_MS = 4000;
 // Advance a little before the track actually ends so there's no dead-air
@@ -125,7 +125,7 @@ async function pollAndAdvance(session, io, ticks) {
       // A *paused* leftover track deliberately doesn't count - starting a
       // session is a request for music, and adopting something paused
       // would just hold everything silent indefinitely.
-      session.nowPlaying = makeExternalNowPlaying(state.track);
+      session.nowPlaying = makeSyntheticNowPlaying(state.track, EXTERNAL_CONTRIBUTOR);
       await broadcastState(io, session);
       return;
     }
@@ -149,7 +149,7 @@ async function pollAndAdvance(session, io, ticks) {
     // watching. It's still fully votable, and the very next poll tick's
     // "is it about to finish" check below will reclaim the queue the
     // moment THIS track ends instead of interrupting it.
-    session.nowPlaying = makeExternalNowPlaying(state.track);
+    session.nowPlaying = makeSyntheticNowPlaying(state.track, EXTERNAL_CONTRIBUTOR);
     await broadcastState(io, session);
     return;
   }
@@ -158,9 +158,7 @@ async function pollAndAdvance(session, io, ticks) {
   if (trackFinishing) {
     await advanceToNext(session, io);
   } else if (ticks % PROGRESS_BROADCAST_EVERY_N_TICKS === 0) {
-    // Re-anchor everyone's progress bar. Nothing persistable changed, so
-    // this deliberately skips the Firestore write.
-    await broadcastState(io, session, { persist: false });
+    await broadcastProgress(io, session);
   }
 }
 
@@ -176,20 +174,21 @@ async function tryStartNext(session, io) {
 
   const accessToken = await ensureFreshToken(session);
 
-  if (usingFallback && session.fallbackTracks.length === 0) {
-    // The chosen seed playlist ran dry - top up from the other hardcoded
-    // one before giving up, rather than going silent for the rest of the
-    // session. Needs accessToken, which is why this check happens after
-    // fetching it above instead of staying inside nextFallbackTrack().
-    await topUpAutopilotMix(session, accessToken);
-  }
+  // The pool top-up and the device lookup are independent Spotify calls -
+  // no reason to wait for one before starting the other. Only picking a
+  // fallback track truly depends on the top-up finishing (it may add to
+  // fallbackTracks); when no top-up is needed this just resolves instantly
+  // and behaves exactly like awaiting resolveTargetDevice alone.
+  const needsTopUp = usingFallback && session.fallbackTracks.length === 0;
+  const [, deviceId] = await Promise.all([
+    needsTopUp ? topUpAutopilotMix(session, accessToken) : Promise.resolve(),
+    resolveTargetDevice(accessToken),
+  ]);
 
   const fallbackTrack = usingFallback ? nextFallbackTrack(session) : null;
   const trackToPlay = next || fallbackTrack;
 
   if (!trackToPlay) return false;
-
-  const deviceId = await resolveTargetDevice(accessToken);
 
   if (!deviceId) {
     // Spotify can't see any device at all - nothing we can do until the
@@ -207,27 +206,12 @@ async function tryStartNext(session, io) {
     console.error(`[playback] session ${session.roomCode} could not start "${trackToPlay.name}":`, err.message);
     session.playbackBlockedReason = `Spotify wouldn't start "${trackToPlay.name}" - trying the next song.`;
 
+    // Two genuinely different retry policies, picked by source rather than
+    // interleaved on one shared code path - see each function for why.
     if (usingFallback) {
-      // Autopilot Mix picks always get a second chance, moved to the back
-      // of the line rather than dropped - the whole point of the mix is
-      // to never need active management, so it should be forgiving.
-      moveFallbackTrackToEnd(session, trackToPlay.uri);
-    } else if (classifyPlaybackError(err) === 'permanent') {
-      // Spotify explicitly rejected this specific track (region lock, a
-      // restriction, a removed/invalid uri) - retrying changes nothing,
-      // so there's no reason to make whoever added it wait it out.
-      session.queue = session.queue.filter((item) => item.id !== trackToPlay.id);
+      retryFallbackTrack(session, trackToPlay);
     } else {
-      // Transient (network blip, Spotify 5xx, rate limit) - worth
-      // retrying. pickNextQueueItem() handles the demotion once
-      // playFailures crosses the threshold; this just increments it.
-      // Previously any failure here would just throw, get swallowed by
-      // the poll loop's catch, and leave the same broken track stuck at
-      // the front forever, retried identically every 4s.
-      trackToPlay.playFailures += 1;
-      if (trackToPlay.playFailures >= MAX_TRANSIENT_FAILURES) {
-        session.queue = session.queue.filter((item) => item.id !== trackToPlay.id);
-      }
+      retryQueueItem(session, trackToPlay, err);
     }
 
     await broadcastState(io, session);
@@ -235,7 +219,7 @@ async function tryStartNext(session, io) {
   }
 
   session.playbackBlockedReason = null;
-  session.nowPlaying = usingFallback ? makeFallbackNowPlaying(trackToPlay) : trackToPlay;
+  session.nowPlaying = usingFallback ? makeSyntheticNowPlaying(trackToPlay, FALLBACK_CONTRIBUTOR) : trackToPlay;
   // The track just started - reset progress to zero immediately rather than
   // leaving the previous track's number showing until the next poll tick.
   session.progressMs = 0;
@@ -256,13 +240,43 @@ async function tryStartNext(session, io) {
  * everything that hasn't - one repeatedly-failing song shouldn't stall
  * everyone else's turn. It's still eventually retried, just once nothing
  * fresher is waiting (and it gets dropped outright past
- * MAX_TRANSIENT_FAILURES - see tryStartNext).
+ * MAX_TRANSIENT_FAILURES - see retryQueueItem below).
  */
 function pickNextQueueItem(queue, queueMode) {
   const ordered = sortQueue(queue, queueMode);
-  const notYetDemoted = ordered.filter((item) => item.playFailures < RETRY_DEMOTION_THRESHOLD);
-  const demoted = ordered.filter((item) => item.playFailures >= RETRY_DEMOTION_THRESHOLD);
-  return notYetDemoted[0] || demoted[0] || null;
+  return (
+    ordered.find((item) => item.playFailures < RETRY_DEMOTION_THRESHOLD) ||
+    ordered.find((item) => item.playFailures >= RETRY_DEMOTION_THRESHOLD) ||
+    null
+  );
+}
+
+/** Autopilot Mix picks always get a second chance, moved to the back of the line rather than dropped - the whole point of the mix is to never need active management, so it should be forgiving. */
+function retryFallbackTrack(session, trackToPlay) {
+  moveFallbackTrackToEnd(session, trackToPlay.uri);
+}
+
+/**
+ * A real queue item's failure gets classified. A permanent rejection
+ * (region lock, a restriction, a removed/invalid uri) is dropped
+ * immediately - retrying changes nothing, so there's no reason to make
+ * whoever added it wait it out. A transient one (network blip, Spotify
+ * 5xx, rate limit) is worth retrying: pickNextQueueItem demotes it once
+ * playFailures crosses RETRY_DEMOTION_THRESHOLD, and it's dropped outright
+ * past MAX_TRANSIENT_FAILURES so one broken song can't stall the queue
+ * forever. Previously any failure here just threw, got swallowed by the
+ * poll loop's catch, and left the same broken track stuck at the front
+ * forever, retried identically every 4s.
+ */
+function retryQueueItem(session, trackToPlay, err) {
+  if (classifyPlaybackError(err) === 'permanent') {
+    session.queue = session.queue.filter((item) => item.id !== trackToPlay.id);
+    return;
+  }
+  trackToPlay.playFailures += 1;
+  if (trackToPlay.playFailures >= MAX_TRANSIENT_FAILURES) {
+    session.queue = session.queue.filter((item) => item.id !== trackToPlay.id);
+  }
 }
 
 /**

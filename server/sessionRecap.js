@@ -3,13 +3,16 @@
 // moment the host stops the session. Computed server-side and sent along
 // with the session:ended event, since by the time clients render it the
 // session itself has already been torn down.
+import { findGoldenRecord } from './goldenRecord.js';
+import { isSyntheticContributor } from './syntheticContributors.js';
 
 /**
  * History is stored newest-first, so iterating in array order visits the
- * most recent plays first. Award ties are broken in favor of the *earlier*
- * play (first to reach the score keeps it), which with this iteration
- * order means a later array entry replaces an equal earlier one - hence
- * the >= comparisons below.
+ * most recent plays first. Per-guest award ties are broken in favor of the
+ * *earlier* play (first to reach the score keeps it), which with this
+ * iteration order means a later array entry replaces an equal earlier one -
+ * hence the >= comparisons below. Golden record uses the same rule, via
+ * the shared findGoldenRecord (also used for the live badge in broadcast.js).
  */
 export function buildSessionRecap(session) {
   const history = session.playHistory;
@@ -27,14 +30,7 @@ export function buildSessionRecap(session) {
 
   if (history.length === 0) return recap;
 
-  // --- Golden record: the single most-upvoted song of the session -------
-  // Only a genuinely positive score wins - if nothing got a single net
-  // upvote, there's no golden record rather than a joyless "winner" at 0.
-  for (const entry of history) {
-    if (entry.netVotes > 0 && entry.netVotes >= (recap.goldenRecord?.netVotes ?? 0)) {
-      recap.goldenRecord = entry;
-    }
-  }
+  recap.goldenRecord = findGoldenRecord(history);
 
   // --- Per-guest aggregates ---------------------------------------------
   // Keyed by guest id; synthetic contributors (Autopilot Mix, external
@@ -43,7 +39,7 @@ export function buildSessionRecap(session) {
   const byGuest = new Map();
   for (const entry of history) {
     const { id, name } = entry.addedBy;
-    if (id === 'fallback' || id === 'external') continue;
+    if (isSyntheticContributor(id)) continue;
 
     const stats = byGuest.get(id) || { name, played: 0, totalNetVotes: 0, votedOut: 0 };
     stats.name = name; // keep the latest name in case they renamed mid-session

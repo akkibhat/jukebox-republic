@@ -178,39 +178,22 @@ export function detectDuplicate(session, uri) {
 }
 
 /**
- * A track Jukebox Republic picked from the Autopilot Mix rather than the real
- * queue, shaped exactly like a normal queue item so it can be voted on,
- * skipped, and land in history the same way anything else does. `addedBy`
- * is a synthetic id ('fallback') that can never match a real guestId, so
- * the self-downvote guard never accidentally blocks the room from
- * downvoting it.
+ * A track Jukebox Republic picked or adopted rather than a guest choosing
+ * it - either cycling in an Autopilot Mix pick, or adopting whatever's
+ * already playing directly on Spotify (most likely the host taking manual
+ * control during a dead zone). Shaped exactly like a normal queue item so
+ * it can be voted on, skipped, and land in history the same way anything
+ * else does, and so the "is it about to finish" progress check in
+ * playbackEngine.js applies to it unchanged. `addedBy` is one of the
+ * synthetic contributors (see syntheticContributors.js), which can never
+ * match a real guestId, so the self-downvote guard never accidentally
+ * blocks the room from downvoting it.
  */
-export function makeFallbackNowPlaying(track) {
+export function makeSyntheticNowPlaying(track, addedBy) {
   return {
     id: randomUUID(),
     ...trackFields(track),
-    addedBy: { id: 'fallback', name: 'Autopilot Mix' },
-    addedAt: Date.now(),
-    round: 0,
-    votes: new Map(),
-    netVotes: 0,
-  };
-}
-
-/**
- * A track Jukebox Republic is watching but didn't choose - someone (almost always
- * the host) started it directly in Spotify, most likely taking manual
- * control during a dead zone. Shaped like any other now-playing item so
- * the existing "is it about to finish" progress check in playbackEngine.js
- * applies to it unchanged, and the group can still vote on it. `addedBy`
- * is a synthetic id, same trick as the Autopilot Mix, so the self-downvote
- * guard can't accidentally match a real guest here either.
- */
-export function makeExternalNowPlaying(track) {
-  return {
-    id: randomUUID(),
-    ...trackFields(track),
-    addedBy: { id: 'external', name: 'Playing on Spotify' },
+    addedBy,
     addedAt: Date.now(),
     round: 0,
     votes: new Map(),
