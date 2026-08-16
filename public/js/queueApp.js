@@ -7,6 +7,19 @@ import { getOrCreateGuestId, getStoredName, setStoredName } from './identity.js'
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+// Firebase Hosting's rewrite to Cloud Run is HTTP-only - it doesn't proxy
+// WebSocket upgrades, so connecting same-origin through music.pi.co.nz
+// silently downgrades Socket.io to long-polling (a full HTTP round-trip per
+// vote or queue action instead of a message over an already-open socket).
+// Connecting straight to the Cloud Run service's own origin gets native
+// WebSockets; static pages/CSS/JS still load from Firebase's CDN as normal,
+// only the live socket bypasses it. Local dev (server and client on the
+// same origin) has no such CDN in the way, so same-origin stays correct there.
+const SOCKET_ORIGIN =
+  location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+    ? undefined
+    : 'https://jukebox-republic-server-902180962093.australia-southeast1.run.app';
+
 // Set once per page load by startQueueApp - host.html and guest.html each
 // load their own instance of this module, so these never leak between them.
 let isHostView = false;
@@ -55,7 +68,7 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
   return ensureName().then(
     (name) =>
       new Promise((resolve) => {
-        const socket = io(); // same-origin, default path - server serves the client script itself
+        const socket = io(SOCKET_ORIGIN); // see SOCKET_ORIGIN comment above
 
         // Fires on the first connection AND on every automatic reconnect,
         // so rejoining after a dead zone needs no special handling - the

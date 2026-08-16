@@ -18,7 +18,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const httpServer = createServer(app);
-const io = new Server(httpServer);
+// CORS is needed here because the client connects directly to this origin
+// rather than through Firebase Hosting's rewrite - Firebase Hosting's CDN
+// layer in front of Cloud Run doesn't proxy WebSocket upgrade requests, so
+// going through it would silently downgrade every connection to
+// long-polling (a real HTTP round-trip per vote/queue action instead of a
+// message over an already-open socket). Connecting straight to Cloud Run
+// gets native WebSockets; static pages/CSS/JS still load fast from
+// Firebase's CDN since only the socket bypasses it.
+const io = new Server(httpServer, {
+  cors: {
+    origin: [config.publicBaseUrl, 'http://localhost:8080'],
+    methods: ['GET', 'POST'],
+  },
+});
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/auth', authRouter);
