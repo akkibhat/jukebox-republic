@@ -20,6 +20,16 @@
   --search-bar-height: 62px;
 }
 
+/* Always reserve room for the scrollbar, even on tabs short enough not to
+   need one. Home and Autopilot usually scroll while Queue, Skipped and
+   History often don't, and since the whole layout is centred (and the
+   fixed bars are positioned against the viewport), a scrollbar appearing
+   narrows the viewport and slides everything sideways by half its width -
+   so switching tabs made the entire UI jump left and right. Mobile uses
+   overlay scrollbars that take no space, so this only ever shows up on
+   desktop, which is exactly where it was spotted. */
+html { scrollbar-gutter: stable; }
+
 * { box-sizing: border-box; }
 
 /* Every icon is a monoline stroke drawing that inherits its colour from
