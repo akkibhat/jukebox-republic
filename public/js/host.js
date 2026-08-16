@@ -100,7 +100,7 @@ if (!sessionId) {
         <div class="invite-row">
           <button class="button button-secondary invite-button" id="invite-button" type="button">Share invite link</button>
         </div>
-        <p>Or scan the QR, or go to <strong>${new URL(info.joinUrl).host}</strong> and enter the code.</p>
+        <p>Or go to <strong>${new URL(info.joinUrl).host}</strong> and enter the code.</p>
         <img id="qr-code" src="${info.qrCodeDataUrl}" alt="QR code to join the spin" />
         <div class="volume-row" id="volume-row">
           <div class="volume-controls" id="volume-controls">
