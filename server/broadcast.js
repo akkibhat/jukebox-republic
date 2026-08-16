@@ -40,6 +40,7 @@ export async function broadcastState(io, session) {
     isPlaying: session.isPlaying,
     progressMs: session.progressMs,
     queueMode: session.queueMode,
+    supportsVolume: session.supportsVolume,
     // Computed once per broadcast rather than by every client re-scanning
     // playHistory on every render - see goldenRecord.js for the rule.
     goldenRecordId: findGoldenRecord(session.playHistory)?.id ?? null,

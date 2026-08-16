@@ -326,6 +326,17 @@ input {
   margin-top: 14px;
 }
 
+/* Separate from volume-row itself so the slider can be hidden on devices
+   that reject remote volume control (some TVs/speakers) without also
+   hiding the device-picker button next to it - a host stuck on one of
+   those devices still needs a way to switch away from it. */
+.volume-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
 .volume-row input[type='range'] {
   flex: 1;
   background: transparent;

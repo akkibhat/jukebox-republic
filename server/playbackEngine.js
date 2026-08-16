@@ -107,6 +107,14 @@ async function pollAndAdvance(session, io, ticks) {
   const isPlayingChanged = session.isPlaying !== isPlaying;
   session.isPlaying = isPlaying;
 
+  // Mirrors whatever Spotify reported for the current device. Left
+  // untouched when there's no active device this tick (state is null)
+  // rather than reset to null, so the volume row doesn't flicker in and
+  // out during a brief no-active-device blip between tracks.
+  if (state) {
+    session.supportsVolume = state.supportsVolume;
+  }
+
   // Progress is re-anchored to Spotify's own number on every poll; between
   // polls each client interpolates forward on its own clock, so the
   // progress bar looks smooth without asking Spotify more than once every

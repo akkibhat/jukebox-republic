@@ -157,6 +157,15 @@ function renderState(state) {
   }
   renderGuestChips(state.guests || []);
 
+  // Only exists on host.html - guest.html has no volume-controls element,
+  // so this is a no-op there. Hidden specifically on a confirmed `false`;
+  // `null` means Spotify hasn't reported yet (no active device this tick),
+  // which shouldn't make the slider flash away on every brief gap.
+  const volumeControls = document.getElementById('volume-controls');
+  if (volumeControls) {
+    volumeControls.style.display = state.supportsVolume === false ? 'none' : 'flex';
+  }
+
   // Re-anchor the progress bar to the server's number the moment it
   // arrives; the tick timer takes over from here until the next update.
   progressAnchor =

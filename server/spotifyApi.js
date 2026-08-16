@@ -157,6 +157,11 @@ export async function getPlaybackState(accessToken) {
     progressMs: data.progress_ms,
     deviceId: data.device?.id || null,
     deviceName: data.device?.name || null,
+    // Spotify reports this per-device (some TVs/speakers reject remote
+    // volume outright) - null when Spotify itself doesn't know yet, which
+    // the client treats the same as "assume supported" rather than hiding
+    // the slider on a guess.
+    supportsVolume: data.device?.supports_volume ?? null,
   };
 }
 

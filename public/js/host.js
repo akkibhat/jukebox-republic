@@ -15,10 +15,12 @@ if (!sessionId) {
         <div class="room-code">${info.roomCode}</div>
         <p>Have friends scan this or go to <strong>${new URL(info.joinUrl).host}</strong> and enter the code.</p>
         <img src="${info.qrCodeDataUrl}" alt="QR code to join the spin" />
-        <div class="volume-row">
-          <svg class="icon volume-icon"><use href="#icon-volume-low"/></svg>
-          <input type="range" id="volume-slider" min="0" max="100" value="50" aria-label="Volume" />
-          <svg class="icon volume-icon"><use href="#icon-volume-high"/></svg>
+        <div class="volume-row" id="volume-row">
+          <div class="volume-controls" id="volume-controls">
+            <svg class="icon volume-icon"><use href="#icon-volume-low"/></svg>
+            <input type="range" id="volume-slider" min="0" max="100" value="50" aria-label="Volume" />
+            <svg class="icon volume-icon"><use href="#icon-volume-high"/></svg>
+          </div>
           <button class="button-icon device-picker-button" id="device-picker-button" type="button" title="Choose playback device">
             <svg class="icon"><use href="#icon-device"/></svg>
           </button>
