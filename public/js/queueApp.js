@@ -645,7 +645,12 @@ function bindLongPress(selector, { onTap, onHold, ms, pressingClass }) {
   // Releasing early (a normal tap) or dragging off the element both cancel
   // the pending hold - only an uninterrupted press should ever reach it.
   const cancelHold = (event) => {
-    event.target.closest(selector)?.classList.remove(pressingClass);
+    // pointerleave fires on the whole document when the pointer exits the
+    // window, not just an element - event.target is the Document itself
+    // then, which has no closest(). Only Elements do.
+    if (event.target instanceof Element) {
+      event.target.closest(selector)?.classList.remove(pressingClass);
+    }
     clearTimeout(timer);
   };
   document.addEventListener('pointerup', cancelHold);
