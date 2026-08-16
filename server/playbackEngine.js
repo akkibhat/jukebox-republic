@@ -35,23 +35,37 @@ const MAX_TRANSIENT_FAILURES = 5;
 // forever burns Spotify calls for a session everyone walked away from -
 // a loop only stops on an explicit "stop spinning".
 const IDLE_POLL_EVERY_N_TICKS = 8; // ~32s
+// How long a session must look idle before we actually slow down. A car
+// in a dead zone looks exactly like an abandoned session - every phone
+// drops off and Spotify stops reporting a device - and if we backed off
+// during one, a track ending mid-outage could leave up to 30s of silence
+// before the next one starts. Real drives on these roads go 10-15 minutes
+// without signal, so the grace period is set well past that. Nothing is
+// lost by being generous: an abandoned session is abandoned for hours, so
+// polling it normally for the first 20 minutes costs almost nothing.
+const IDLE_GRACE_TICKS = 300; // ~20 min
 // How often a mid-track tick re-anchors everyone's progress bar. Clients
 // interpolate from the last anchor on their own clock, so a slower cadence
 // is invisible but cuts socket traffic - and, more importantly, the
 // Firestore writes those broadcasts used to trigger.
 const PROGRESS_BROADCAST_EVERY_N_TICKS = 3; // ~12s
 
-/** sessionId -> { handle, ticks }, so each session's loop can be stopped independently. */
+/** sessionId -> { handle, ticks, idleTicks }, so each session's loop can be stopped independently. */
 const loops = new Map();
 
 /** Starts the 4s watch loop for a session. No-op if it's already running. */
 export function startPlaybackLoop(session, io) {
   if (loops.has(session.id)) return;
 
-  const loop = { handle: null, ticks: 0 };
+  const loop = { handle: null, ticks: 0, idleTicks: 0 };
   loop.handle = setInterval(() => {
     loop.ticks += 1;
-    if (isIdle(session) && loop.ticks % IDLE_POLL_EVERY_N_TICKS !== 0) return;
+    // Any sign of life resets the streak, so backing off takes a sustained
+    // absence rather than one bad poll.
+    loop.idleTicks = isIdle(session) ? loop.idleTicks + 1 : 0;
+
+    const backedOff = loop.idleTicks > IDLE_GRACE_TICKS;
+    if (backedOff && loop.ticks % IDLE_POLL_EVERY_N_TICKS !== 0) return;
 
     pollAndAdvance(session, io, loop.ticks).catch((err) => {
       console.error(`[playback] session ${session.roomCode} poll failed:`, err.message);

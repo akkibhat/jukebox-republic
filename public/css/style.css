@@ -301,6 +301,23 @@ input {
   margin-bottom: 2px;
 }
 
+/* --- Offline / reconnecting banner --- */
+
+.connection-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40; /* above everything, including the name prompt */
+  background: var(--danger);
+  color: #2b0a11;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  padding-top: calc(6px + env(safe-area-inset-top));
+}
+
 /* --- Queue mode banner (Fair rotation / Majority rule) --- */
 
 .queue-mode-bar {

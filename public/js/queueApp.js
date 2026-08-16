@@ -49,15 +49,26 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
       new Promise((resolve) => {
         const socket = io(); // same-origin, default path - server serves the client script itself
 
+        // Fires on the first connection AND on every automatic reconnect,
+        // so rejoining after a dead zone needs no special handling - the
+        // same join re-registers this guest and pulls fresh state down.
         socket.on('connect', () => {
           socket.emit('join', { sessionId, guestId: myGuestId, name, isHost }, (response) => {
             if (response?.error) {
+              // The session ended (or we were kicked) while we were away.
               renderFatalError(response.error);
               return;
             }
+            setConnectionBanner(null);
             resolve(socket);
           });
         });
+
+        // Long outages are normal on the roads this gets used on, so say
+        // so plainly instead of leaving a frozen UI that looks broken.
+        // Socket.io retries on its own, indefinitely, with backoff.
+        socket.on('disconnect', () => setConnectionBanner('Offline - reconnecting…'));
+        socket.io.on('reconnect_attempt', () => setConnectionBanner('Offline - reconnecting…'));
 
         socket.on('state', renderState);
         socket.on('session:ended', renderSessionEnded);
@@ -101,6 +112,29 @@ function ensureName() {
 }
 
 // --- Rendering ----------------------------------------------------------
+
+/**
+ * Shows or clears the offline banner. Pass null once we're back.
+ *
+ * While offline the progress bar is frozen deliberately: it would
+ * otherwise keep interpolating forward from a stale anchor and drift out
+ * of step with whatever is actually playing.
+ */
+function setConnectionBanner(message) {
+  let banner = document.getElementById('connection-banner');
+  if (!message) {
+    banner?.remove();
+    return;
+  }
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'connection-banner';
+    banner.className = 'connection-banner';
+    document.body.appendChild(banner);
+  }
+  banner.textContent = message;
+  if (progressAnchor) progressAnchor.playing = false;
+}
 
 /** Entry point for every server update - repaints the whole UI from one state payload. */
 function renderState(state) {
