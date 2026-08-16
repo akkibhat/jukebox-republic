@@ -63,8 +63,13 @@ authRouter.get('/callback', async (req, res) => {
     // session.joinUrl is fixed for the session's whole life, so the PNG
     // would come out identical every time anyway. High error correction
     // (tolerates ~30% of the code being obscured) is what lets host.js
-    // safely draw the app's logo over the center client-side.
-    session.qrCodeDataUrl = await QRCode.toDataURL(session.joinUrl, { errorCorrectionLevel: 'H' });
+    // safely draw the app's logo over the center client-side. width: 560
+    // is well past what the library's default would give (a couple
+    // hundred px) - CSS displays this at 140px, but phone screens are
+    // almost universally 2-3x DPI, so the source needs to be that many
+    // physical pixels or it upscales and looks pixelated despite the
+    // smaller CSS size.
+    session.qrCodeDataUrl = await QRCode.toDataURL(session.joinUrl, { errorCorrectionLevel: 'H', width: 560 });
 
     // Seeded once, right at session start, rather than on-demand the first
     // time the queue runs dry - that would add a delay right when everyone
