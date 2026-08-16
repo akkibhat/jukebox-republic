@@ -1,57 +1,78 @@
-// Sends the current state of a session (now playing + fairly-ordered queue)
-// to everyone connected to its room. Pulled out into its own module so both
+// Pushes session state to everyone in a room. Its own module so both
 // sockets.js (reacting to guest actions) and playbackEngine.js (reacting to
-// the clock) can push updates without importing each other.
+// the clock) can broadcast without importing each other.
 import { serializeItem, connectedGuestCount, connectedGuests } from './sessionStore.js';
 import { sortQueue, downvoteThreshold } from './queueFairness.js';
 import { schedulePersist } from './persistence.js';
 
+/** Socket.io room name for a session. */
 export function roomName(sessionId) {
   return `session:${sessionId}`;
 }
 
 /**
- * Broadcasts to everyone in the room, but personalizes `myVote` per socket
- * so each guest's UI can highlight the vote button they've already pressed.
- * Socket.io doesn't support per-recipient payloads on a room broadcast, so
- * we iterate the sockets in the room individually - session queues are tiny
- * (a handful of guests, a handful of tracks), so this is cheap.
+ * Sends the current state to every connected socket in the session.
+ *
+ * Two things vary per recipient - which vote they cast, and whether they
+ * hold host powers - so each socket gets its own payload. Everything else
+ * is serialized once up front and shared by reference, since recounting
+ * votes per socket would repeat identical work for every phone in the room.
+ *
+ * Pass `persist: false` for cosmetic broadcasts (the periodic progress
+ * re-anchor) so they don't each cost a Firestore write - nothing worth
+ * saving has changed, and playback position is re-read from Spotify on
+ * restore anyway.
  */
-export async function broadcastState(io, session) {
-  const orderedQueue = sortQueue(session.queue, session.queueMode);
+export async function broadcastState(io, session, { persist = true } = {}) {
   const guestCount = connectedGuestCount(session);
-  // Computed once per broadcast, not per vote: the threshold moves as
-  // people join/leave, so every track's "X of Y to skip" display should
-  // always reflect who's connected *right now*, not who was connected the
-  // last time someone tapped a vote button.
+  // Recomputed per broadcast, not per vote: the threshold moves as people
+  // join and leave, so "X of Y to skip" should reflect who's here now.
   const threshold = downvoteThreshold(guestCount);
-  const guests = connectedGuests(session);
+
+  const shared = {
+    roomCode: session.roomCode,
+    skippedSongs: session.skippedSongs,
+    playHistory: session.playHistory,
+    fallbackTracks: session.fallbackTracks,
+    connectedGuestCount: guestCount,
+    guests: connectedGuests(session),
+    playbackBlockedReason: session.playbackBlockedReason,
+    isPlaying: session.isPlaying,
+    progressMs: session.progressMs,
+    queueMode: session.queueMode,
+  };
+
+  // Serialized once, then personalized per socket below. Each entry keeps a
+  // reference to the raw item so myVote can be looked up without redoing
+  // the vote tally.
+  const queue = sortQueue(session.queue, session.queueMode).map((item) => ({
+    raw: item,
+    payload: serializeItem(item, null, { threshold }),
+  }));
+  const nowPlaying = session.nowPlaying
+    ? { raw: session.nowPlaying, payload: serializeItem(session.nowPlaying, null, { threshold }) }
+    : null;
+
   const sockets = await io.in(roomName(session.id)).fetchSockets();
 
   for (const socket of sockets) {
     const guestId = socket.data.guestId;
     socket.emit('state', {
-      roomCode: session.roomCode,
-      nowPlaying: serializeItem(session.nowPlaying, guestId, { threshold }),
-      queue: orderedQueue.map((item) => serializeItem(item, guestId, { threshold })),
-      skippedSongs: session.skippedSongs,
-      playHistory: session.playHistory,
-      fallbackTracks: session.fallbackTracks,
-      connectedGuestCount: guestCount,
-      guests,
-      playbackBlockedReason: session.playbackBlockedReason,
-      isPlaying: session.isPlaying,
-      progressMs: session.progressMs,
-      queueMode: session.queueMode,
-      // Personalized like myVote: whether THIS connection may use the
-      // host's playback/kick powers (being the host, or promoted co-host).
-      // The server still checks every action - this only decides whether
-      // the buttons render.
+      ...shared,
+      nowPlaying: nowPlaying && { ...nowPlaying.payload, myVote: voteOf(nowPlaying.raw, guestId) },
+      queue: queue.map(({ raw, payload }) => ({ ...payload, myVote: voteOf(raw, guestId) })),
+      // Decides whether the host controls render. The server re-checks
+      // every action regardless - this is only an affordance.
       youHavePowers: socket.data.isHost || session.coHostIds.has(guestId),
     });
   }
 
-  // Every state change flows through here, which makes this the one spot
-  // to mirror the session to Firestore (debounced - see persistence.js).
-  schedulePersist(session);
+  // Every meaningful state change flows through here, making this the one
+  // place that needs to mirror the session to Firestore.
+  if (persist) schedulePersist(session);
+}
+
+/** This guest's vote on a track, or null if they haven't voted. */
+function voteOf(item, guestId) {
+  return guestId ? item.votes.get(guestId) || null : null;
 }

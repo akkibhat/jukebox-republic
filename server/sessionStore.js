@@ -242,14 +242,23 @@ export function removeFromFallbackTracks(session, uri) {
 }
 
 /**
- * Merges freshly-fetched tracks into the Autopilot Mix, skipping any uri
- * already in the pool. The same song can plausibly turn up on more than
- * one of the hardcoded seed playlists (they're all "road trip" themed),
- * and there's no reason to offer it twice.
+ * Merges freshly-fetched tracks into the Autopilot Mix, skipping uris
+ * already pooled - the same song often appears on more than one seed
+ * playlist, and there's no reason to offer it twice.
+ *
+ * The pool is capped because the whole session is persisted as a single
+ * Firestore document, and those have a hard 1 MiB ceiling. A few large
+ * playlists (2,000 tracks each, see MAX_PLAYLIST_PAGES) would blow past
+ * it and make every save fail. The cap is far more music than one session
+ * can play anyway - at ~3.5 min a track it's over a day of continuous
+ * fallback.
  */
+const FALLBACK_POOL_LIMIT = 600;
+
 export function addToFallbackTracks(session, tracks) {
   const existingUris = new Set(session.fallbackTracks.map((t) => t.uri));
   for (const track of tracks) {
+    if (session.fallbackTracks.length >= FALLBACK_POOL_LIMIT) break;
     if (!existingUris.has(track.uri)) {
       session.fallbackTracks.push(track);
       existingUris.add(track.uri);

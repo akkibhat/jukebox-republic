@@ -17,6 +17,7 @@ import {
   removeFromFallbackTracks,
   moveFallbackTrackToEnd,
   addToFallbackTracks,
+  connectedGuestCount,
 } from './sessionStore.js';
 import { broadcastState } from './broadcast.js';
 
@@ -29,28 +30,54 @@ const END_OF_TRACK_LEAD_MS = 2500;
 // Jukebox Republic gives up on it entirely - see pickNextQueueItem.
 const RETRY_DEMOTION_THRESHOLD = 2;
 const MAX_TRANSIENT_FAILURES = 5;
+// An idle session (nobody connected AND nothing playing) still needs an
+// occasional look in case the host comes back, but polling it every 4s
+// forever burns Spotify calls for a session everyone walked away from -
+// a loop only stops on an explicit "stop spinning".
+const IDLE_POLL_EVERY_N_TICKS = 8; // ~32s
+// How often a mid-track tick re-anchors everyone's progress bar. Clients
+// interpolate from the last anchor on their own clock, so a slower cadence
+// is invisible but cuts socket traffic - and, more importantly, the
+// Firestore writes those broadcasts used to trigger.
+const PROGRESS_BROADCAST_EVERY_N_TICKS = 3; // ~12s
 
-/** sessionId -> setInterval handle, so each session's loop can be stopped independently. */
+/** sessionId -> { handle, ticks }, so each session's loop can be stopped independently. */
 const loops = new Map();
 
+/** Starts the 4s watch loop for a session. No-op if it's already running. */
 export function startPlaybackLoop(session, io) {
-  if (loops.has(session.id)) return; // already running
+  if (loops.has(session.id)) return;
 
-  const tick = () => pollAndAdvance(session, io).catch((err) => {
-    console.error(`[playback] session ${session.roomCode} poll failed:`, err.message);
-  });
+  const loop = { handle: null, ticks: 0 };
+  loop.handle = setInterval(() => {
+    loop.ticks += 1;
+    if (isIdle(session) && loop.ticks % IDLE_POLL_EVERY_N_TICKS !== 0) return;
 
-  const handle = setInterval(tick, POLL_INTERVAL_MS);
-  loops.set(session.id, handle);
+    pollAndAdvance(session, io, loop.ticks).catch((err) => {
+      console.error(`[playback] session ${session.roomCode} poll failed:`, err.message);
+    });
+  }, POLL_INTERVAL_MS);
+
+  loops.set(session.id, loop);
 }
 
 export function stopPlaybackLoop(sessionId) {
-  const handle = loops.get(sessionId);
-  if (handle) clearInterval(handle);
+  const loop = loops.get(sessionId);
+  if (loop) clearInterval(loop.handle);
   loops.delete(sessionId);
 }
 
-async function pollAndAdvance(session, io) {
+/**
+ * Nobody listening and nothing playing - the two things a tick could react
+ * to are both absent. Note that a session whose host closed their browser
+ * but whose music is still playing is NOT idle: the queue should keep
+ * advancing for the car even with every screen off.
+ */
+function isIdle(session) {
+  return connectedGuestCount(session) === 0 && !session.isPlaying;
+}
+
+async function pollAndAdvance(session, io, ticks) {
   const accessToken = await ensureFreshToken(session);
   const state = await getPlaybackState(accessToken);
 
@@ -111,11 +138,10 @@ async function pollAndAdvance(session, io) {
   const trackFinishing = state.progressMs + END_OF_TRACK_LEAD_MS >= session.nowPlaying.durationMs;
   if (trackFinishing) {
     await advanceToNext(session, io);
-  } else {
-    // An ordinary mid-track tick used to be silent, but now it carries the
-    // fresh progress number - broadcast so every phone's bar re-anchors to
-    // reality instead of drifting on its own interpolation.
-    await broadcastState(io, session);
+  } else if (ticks % PROGRESS_BROADCAST_EVERY_N_TICKS === 0) {
+    // Re-anchor everyone's progress bar. Nothing persistable changed, so
+    // this deliberately skips the Firestore write.
+    await broadcastState(io, session, { persist: false });
   }
 }
 
