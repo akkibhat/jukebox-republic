@@ -69,6 +69,22 @@ export function getSession(sessionId) {
   return sessions.get(sessionId);
 }
 
+/**
+ * Finds a still-live session already hosted by this Spotify account, if
+ * any - used at login (routes/auth.js) so logging in again (a browser
+ * crash, or being told to re-auth after a scope change) resumes the
+ * existing party instead of silently spinning up a second, parallel one
+ * that leaves already-connected guests talking to an orphaned session.
+ * A linear scan is fine here: this runs once per login, not a hot path,
+ * and concurrent sessions on this app number in the single digits.
+ */
+export function getSessionByHostId(hostSpotifyId) {
+  for (const session of sessions.values()) {
+    if (session.host.spotifyId === hostSpotifyId) return session;
+  }
+  return undefined;
+}
+
 /** Looks up a session by the short code guests type in. Case-insensitive. */
 export function getSessionByRoomCode(roomCode) {
   const id = roomCodeIndex.get(roomCode.toUpperCase());

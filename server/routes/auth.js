@@ -6,9 +6,10 @@ import { randomUUID } from 'node:crypto';
 import QRCode from 'qrcode';
 import { buildAuthorizeUrl, exchangeCodeForTokens } from '../spotifyAuth.js';
 import { getCurrentUserProfile } from '../spotifyApi.js';
-import { createSession, addToFallbackTracks } from '../sessionStore.js';
+import { createSession, addToFallbackTracks, getSessionByHostId } from '../sessionStore.js';
 import { pickSeedPlaylist } from '../autopilotMix.js';
 import { getSeedPlaylistTracks } from '../seedPlaylistCache.js';
+import { schedulePersist } from '../persistence.js';
 
 export const authRouter = Router();
 
@@ -37,6 +38,20 @@ authRouter.get('/callback', async (req, res) => {
   try {
     const tokens = await exchangeCodeForTokens(code);
     const profile = await getCurrentUserProfile(tokens.accessToken);
+
+    // Logging in again while this account already has a live session -
+    // a browser crash, or being told to re-auth after a scope change -
+    // resumes that session in place (fresh tokens, same room code, same
+    // queue and guests) rather than silently spinning up a second,
+    // parallel one that leaves already-connected guests pointed at an
+    // orphaned session nobody's looking at.
+    const existing = getSessionByHostId(profile.id);
+    if (existing) {
+      existing.tokens = tokens;
+      schedulePersist(existing);
+      console.log(`[auth] resumed existing session ${existing.roomCode} for ${profile.displayName} (tokens refreshed)`);
+      return res.redirect(`/host.html?session=${existing.id}`);
+    }
 
     const session = createSession({
       hostSpotifyId: profile.id,

@@ -105,6 +105,7 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
           renderSessionEnded(recap);
         });
         socket.on('kicked', () => renderFatalError('The host removed you from this session.'));
+        socket.on('history:exported', () => showToast('Host saved tonight\'s playlist to Spotify'));
 
         wireSearch(sessionId, socket);
         wirePlaylistSearch(sessionId, socket);

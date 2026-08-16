@@ -320,6 +320,11 @@ export function registerSocketHandlers(io) {
         const uris = [...session.playHistory].reverse().map((item) => item.uri);
         await addTracksToPlaylist(accessToken, playlist.id, uris);
         ack?.({ ok: true, url: playlist.externalUrl });
+        // Everyone contributed to this playlist, not just the host - a
+        // quiet heads-up feels earned. socket.to (not io.in) excludes the
+        // host's own connection, which already gets its own confirmation
+        // via the ack above and would otherwise see the same toast twice.
+        socket.to(roomName(session.id)).emit('history:exported');
       } catch (err) {
         console.error(`[sockets] history:export failed for ${session.roomCode}:`, err.message);
         ack?.({ error: 'Could not save to Spotify. Try again in a moment.' });

@@ -6,9 +6,28 @@ import { fetchJson } from './api.js';
  * it in a new tab on success - the toast alone wouldn't be clickable, and a
  * host who just asked for this wants to actually see the result, not just
  * a confirmation that something happened.
+ *
+ * `button`, when given, is disabled with a "Saving…" label for the
+ * duration of the request - a long history can take a couple of seconds to
+ * write, and with no feedback in that gap it reads as broken rather than
+ * working. The "Stop spinning" flow has no button to disable at that
+ * point (the confirm dialogs already own the moment), so it gets an
+ * immediate toast instead - same idea, different surface.
  */
-function exportHistory(socket, onDone) {
+function exportHistory(socket, { button, onDone } = {}) {
+  if (button) {
+    button.disabled = true;
+    button.dataset.originalLabel = button.textContent;
+    button.textContent = 'Saving…';
+  } else {
+    showToast('Saving history…');
+  }
+
   socket.emit('history:export', {}, (response) => {
+    if (button) {
+      button.disabled = false;
+      button.textContent = button.dataset.originalLabel;
+    }
     if (response?.error) {
       showToast(response.error);
     } else {
@@ -57,14 +76,14 @@ if (!sessionId) {
           // alive - the moment session:end lands, the server tears the
           // session down and force-disconnects every socket, which would
           // leave nothing for a save attempted afterward to act on.
-          exportHistory(socket, () => socket.emit('session:end'));
+          exportHistory(socket, { onDone: () => socket.emit('session:end') });
         } else {
           socket.emit('session:end');
         }
       });
 
-      document.getElementById('export-history-button').addEventListener('click', () => {
-        exportHistory(socket);
+      document.getElementById('export-history-button').addEventListener('click', (event) => {
+        exportHistory(socket, { button: event.currentTarget });
       });
 
       // The slider lives here in the session header (rendered once) rather
