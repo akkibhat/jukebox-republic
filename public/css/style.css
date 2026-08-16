@@ -901,6 +901,68 @@ input {
   padding: 20px;
 }
 
+/* --- Info modal: the (?) help overlay explaining each page, see task #24 --- */
+
+.info-button {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 16px);
+  right: 16px;
+  z-index: 20;
+}
+
+.info-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 32; /* above the name-prompt (30) - reachable the moment it's dismissed */
+  background: rgba(0, 0, 0, 0.7);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.info-overlay.open { display: flex; }
+
+.info-modal.card {
+  max-width: 420px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  text-align: left;
+  gap: 14px;
+}
+
+.info-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.info-modal-header h2 {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.info-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.info-modal-body p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.info-modal-body strong {
+  color: var(--text);
+}
+
 /* --- Toast: brief error messages (duplicate song, self-downvote, etc) --- */
 
 .toast {
