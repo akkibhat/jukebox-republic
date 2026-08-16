@@ -19,7 +19,7 @@ import { nextRoundForGuest, applyVote } from './queueFairness.js';
 import { buildSessionRecap } from './sessionRecap.js';
 import { broadcastState, roomName } from './broadcast.js';
 import { startPlaybackLoop, stopPlaybackLoop, skipCurrentTrack } from './playbackEngine.js';
-import { pausePlayback, resumePlayback, setVolume, getPlaylistTracks } from './spotifyApi.js';
+import { pausePlayback, resumePlayback, setVolume, getPlaylistTracks, getAvailableDevices, transferPlayback } from './spotifyApi.js';
 import { ensureFreshToken } from './spotifyAuth.js';
 
 // How long a guest whose socket disconnects still counts as "connected" -
@@ -246,6 +246,41 @@ export function registerSocketHandlers(io) {
               ? "This playback device doesn't allow volume control."
               : 'Could not change volume. Try again in a moment.',
         });
+      }
+    });
+
+    // Lists every Spotify Connect device the host's account can currently
+    // see, fetched on demand (not pushed/polled) since it's only needed
+    // while the host actually has the picker open.
+    socket.on('playback:devices', async (_payload, ack) => {
+      const session = requirePermission(socket, ack, 'host');
+      if (!session) return;
+
+      try {
+        const accessToken = await ensureFreshToken(session);
+        const devices = await getAvailableDevices(accessToken);
+        ack?.({ ok: true, devices });
+      } catch (err) {
+        console.error('[sockets] playback:devices failed:', err.message);
+        ack?.({ error: 'Could not load devices. Try again in a moment.' });
+      }
+    });
+
+    // Manual override for which device playback goes to - see
+    // transferPlayback's comment for why this exists (Spotify's own
+    // auto-pick can hand off to a TV/speaker instead of a screen-off phone).
+    socket.on('playback:setDevice', async ({ deviceId }, ack) => {
+      const session = requirePermission(socket, ack, 'host');
+      if (!session) return;
+      if (!deviceId) return ack?.({ error: 'No device selected.' });
+
+      try {
+        const accessToken = await ensureFreshToken(session);
+        await transferPlayback(accessToken, deviceId);
+        ack?.({ ok: true });
+      } catch (err) {
+        console.error('[sockets] playback:setDevice failed:', err.message);
+        ack?.({ error: 'Could not switch devices. Try again in a moment.' });
       }
     });
 

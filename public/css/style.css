@@ -340,6 +340,54 @@ input {
   height: 17px;
 }
 
+.button-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.button-icon .icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* The on-demand device list under the volume row. Hidden by default and
+   toggled by device-picker-button - see host.js for why it's fetched fresh
+   on open rather than kept live. */
+.device-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.device-list-status {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.device-option {
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.device-option-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* --- Now playing --- */
 
 .now-playing-card {

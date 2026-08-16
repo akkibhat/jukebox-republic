@@ -179,6 +179,23 @@ export async function getAvailableDevices(accessToken) {
   }));
 }
 
+/**
+ * Moves playback to a specific Connect device by id. Spotify auto-picks a
+ * device (see resolveTargetDevice in playbackEngine.js) whenever nothing is
+ * already active, which is what lets a screen-off phone lose out to
+ * whatever else the host's account can see (a TV, a speaker) - this is the
+ * host's manual override for that. `play: true` would also resume/start
+ * playback on the target as part of the same call; left false here since
+ * the host is just relocating where an already-running (or about-to-start)
+ * session plays, not toggling playback state.
+ */
+export async function transferPlayback(accessToken, deviceId) {
+  await spotifyFetch('/me/player', accessToken, {
+    method: 'PUT',
+    body: JSON.stringify({ device_ids: [deviceId], play: false }),
+  });
+}
+
 /** Starts playback of a specific track URI on the host's currently active device (their phone). */
 export async function playTrack(accessToken, uri, deviceId) {
   const query = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
