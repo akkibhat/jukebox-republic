@@ -1,0 +1,17 @@
+{
+  "name": "Jukebox Republic",
+  "short_name": "Jukebox",
+  "description": "The people's queue - a shared, votable Spotify queue.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#16130f",
+  "theme_color": "#16130f",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

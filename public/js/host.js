@@ -19,9 +19,9 @@ if (!sessionId) {
         <p>Have friends scan this or go to <strong>${new URL(info.joinUrl).host}</strong> and enter the code.</p>
         <img src="${info.qrCodeDataUrl}" alt="QR code to join the spin" />
         <div class="volume-row">
-          <span class="volume-icon">&#128264;</span>
+          <svg class="icon volume-icon"><use href="#icon-volume-low"/></svg>
           <input type="range" id="volume-slider" min="0" max="100" value="50" aria-label="Volume" />
-          <span class="volume-icon">&#128266;</span>
+          <svg class="icon volume-icon"><use href="#icon-volume-high"/></svg>
         </div>
         <button class="button button-secondary end-session-button" id="end-session-button" type="button">Stop spinning</button>
       `;

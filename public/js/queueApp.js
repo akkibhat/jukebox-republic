@@ -160,7 +160,7 @@ function renderState(state) {
 
   renderNowPlaying(state.nowPlaying, state.playbackBlockedReason, state.isPlaying, state.progressMs);
   renderQueueModeBars(state.queueMode);
-  renderQueue(state.queue);
+  renderQueue(state.queue, (state.fallbackTracks || []).length > 0);
   renderReaddableList('autopilot-list', state.fallbackTracks, 'Add to queue', 'Nothing in the Autopilot Mix right now.');
   renderReaddableList('skipped-list', state.skippedSongs, 'Re-add', 'Nothing skipped yet.');
   renderReaddableList('history-list', state.playHistory, 'Re-add', 'Nothing played yet.', {
@@ -182,14 +182,14 @@ function renderGuestChips(guests) {
   el.innerHTML = guests
     .map((guest) => {
       const isMe = guest.id === myGuestId;
-      const badge = guest.isCoHost ? '<span class="cohost-badge" title="Co-host">&#9733;</span>' : '';
+      const badge = guest.isCoHost ? iconHtml('star', 'icon cohost-badge') : '';
       const promote =
         isHostView && !isMe
-          ? `<button class="chip-action promote-button" data-guest-id="${guest.id}" data-promote="${guest.isCoHost ? 'false' : 'true'}" title="${guest.isCoHost ? 'Remove co-host powers' : 'Make co-host'}">&#9733;</button>`
+          ? `<button class="chip-action promote-button" data-guest-id="${guest.id}" data-promote="${guest.isCoHost ? 'false' : 'true'}" title="${guest.isCoHost ? 'Remove co-host powers' : 'Make co-host'}">${iconHtml('star')}</button>`
           : '';
       const kick =
         havePowers && !isMe
-          ? `<button class="chip-action kick-button" data-guest-id="${guest.id}" data-guest-name="${escapeHtml(guest.name)}" title="Remove from session">&times;</button>`
+          ? `<button class="chip-action kick-button" data-guest-id="${guest.id}" data-guest-name="${escapeHtml(guest.name)}" title="Remove from session">${iconHtml('x')}</button>`
           : '';
       return `<span class="guest-chip">${escapeHtml(guest.name)}${isMe ? ' (you)' : ''}${badge}${promote}${kick}</span>`;
     })
@@ -294,22 +294,29 @@ function renderQueueModeBars(mode) {
 
   const isFair = mode !== 'crowd';
   const label = isFair
-    ? '&#9878;&#65039; Fair rotation &mdash; everyone gets a turn'
-    : '&#128293; Majority rule &mdash; most upvoted plays first';
+    ? `${iconHtml('scales', 'icon mode-icon')} Fair rotation &mdash; everyone gets a turn`
+    : `${iconHtml('crowd', 'icon mode-icon')} Majority rule &mdash; most upvoted plays first`;
   const toggle = isHostView
     ? `<button class="mode-toggle" data-mode="${isFair ? 'crowd' : 'fair'}" type="button">Switch</button>`
     : '';
 
   bars.forEach((bar) => {
-    bar.innerHTML = `<span>${label}</span>${toggle}`;
+    bar.innerHTML = `<span class="mode-label">${label}</span>${toggle}`;
   });
 }
 
 /** Renders into both #queue-list-home (Home tab) and #queue-list-tab (Queue tab) - same data, same markup, two places to see it. */
-function renderQueue(queue) {
+function renderQueue(queue, hasAutopilot) {
   const html =
     queue.length === 0
-      ? `<p class="empty-state">Queue's empty. Search below to add the next song.</p>`
+      ? // An empty queue isn't silence - the Autopilot Mix takes over - so
+        // say so, otherwise it reads like the music is about to stop. Only
+        // promise that when the mix actually has something left in it.
+        `<p class="empty-state">${
+          hasAutopilot
+            ? "Queue's empty &mdash; the Autopilot Mix is keeping the music going. Search below to add a real pick."
+            : "Queue's empty. Search below to add the next song."
+        }</p>`
       : queue
           .map(
             // The first row is what plays next - it gets a highlighted
@@ -380,7 +387,12 @@ function renderReaddableList(listId, tracks, buttonLabel, emptyMessage, { golden
 
 /** The session's most-upvoted played song wears this in the History tab. */
 function goldenBadgeHtml(track) {
-  return `<span class="golden-badge" title="Golden record - the session's most upvoted song (+${track.netVotes})">&#129351;</span>`;
+  return `<svg class="icon golden-badge"><title>Golden record - the session's most upvoted song (+${track.netVotes})</title><use href="#icon-record"/></svg>`;
+}
+
+/** An icon from the page's sprite - see the &lt;symbol&gt; defs in host.html / guest.html. */
+function iconHtml(name, className = 'icon') {
+  return `<svg class="${className}"><use href="#icon-${name}"/></svg>`;
 }
 
 /** Up/down buttons with the current net score, highlighting whichever way this guest voted. */
@@ -389,16 +401,16 @@ function voteButtonsHtml(track) {
   const downClass = track.myVote === 'down' ? 'active-down' : '';
   return `
     <div class="vote-buttons">
-      <button class="vote-button ${upClass}" data-vote="up">&#9650;</button>
+      <button class="vote-button ${upClass}" data-vote="up" aria-label="Vote up">${iconHtml('vote-up', 'icon vote-icon')}</button>
       <span class="net-votes">${track.netVotes}</span>
-      <button class="vote-button ${downClass}" data-vote="down">&#9660;</button>
+      <button class="vote-button ${downClass}" data-vote="down" aria-label="Vote down">${iconHtml('vote-down', 'icon vote-icon')}</button>
     </div>
   `;
 }
 
 /** The little x for pulling a song back out - only rendered where removal is allowed. */
 function removeButtonHtml() {
-  return `<button class="remove-button" title="Remove your song">&times;</button>`;
+  return `<button class="remove-button" title="Remove your song" aria-label="Remove">${iconHtml('x')}</button>`;
 }
 
 /** "2 of 3 to skip" - only shown once a track has at least one downvote, so a clean track shows nothing extra. */
@@ -457,31 +469,55 @@ function hostControlsHtml(isPlaying) {
   `;
 }
 
+/**
+ * Swaps the whole page for a terminal screen, keeping the icon sprite
+ * alive - it lives in the body, so a plain innerHTML wipe would leave
+ * every <use> on the new screen pointing at nothing.
+ */
+function replaceBody(html) {
+  const sprite = document.getElementById('icon-sprite');
+  document.body.innerHTML = html;
+  if (sprite) document.body.prepend(sprite);
+}
+
 /** Replaces the page with a dead end - a bad code, an ended session, or being kicked. */
 function renderFatalError(message) {
-  document.body.innerHTML = `<main class="screen screen-center"><p>${escapeHtml(message)}</p><a class="button button-secondary" href="/">Back home</a></main>`;
+  replaceBody(`
+    <main class="screen screen-center">
+      ${logoMarkHtml('logo-mark')}
+      <p>${escapeHtml(message)}</p>
+      <a class="button button-secondary" href="/">Back home</a>
+    </main>
+  `);
+}
+
+/** The ring-and-bars logo mark. Written out rather than sprited so the terminal screens can't lose it. */
+function logoMarkHtml(className) {
+  return `
+    <svg class="${className}" viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="3"/>
+      <circle cx="50" cy="50" r="37" fill="none" stroke="currentColor" stroke-width="1"/>
+      <rect x="18" y="39" width="8" height="22" rx="2" fill="currentColor"/>
+      <rect x="32" y="31" width="8" height="38" rx="2" fill="currentColor"/>
+      <rect x="46" y="23" width="8" height="54" rx="2" fill="currentColor"/>
+      <rect x="60" y="31" width="8" height="38" rx="2" fill="currentColor"/>
+      <rect x="74" y="39" width="8" height="22" rx="2" fill="currentColor"/>
+    </svg>
+  `;
 }
 
 /** The goodbye screen, with the election results when anything actually played. */
 function renderSessionEnded(recap) {
-  document.body.innerHTML = `
+  replaceBody(`
     <main class="screen screen-center">
-      <svg class="logo-mark" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="3"/>
-        <circle cx="50" cy="50" r="37" fill="none" stroke="currentColor" stroke-width="1"/>
-        <rect x="18" y="39" width="8" height="22" rx="2" fill="currentColor"/>
-        <rect x="32" y="31" width="8" height="38" rx="2" fill="currentColor"/>
-        <rect x="46" y="23" width="8" height="54" rx="2" fill="currentColor"/>
-        <rect x="60" y="31" width="8" height="38" rx="2" fill="currentColor"/>
-        <rect x="74" y="39" width="8" height="22" rx="2" fill="currentColor"/>
-      </svg>
+      ${logoMarkHtml('logo-mark')}
       <h1 class="logo">Jukebox Republic</h1>
       <div class="logo-rule"></div>
       <p>The jukebox has stopped. Thanks for listening.</p>
       ${recapHtml(recap)}
       <a class="button button-secondary" href="/">Back home</a>
     </main>
-  `;
+  `);
 }
 
 /**
@@ -499,7 +535,7 @@ function recapHtml(recap) {
     const g = recap.goldenRecord;
     rows.push(
       recapRowHtml(
-        '&#129351;',
+        iconHtml('record'),
         'Golden record',
         `${escapeHtml(g.name)} — ${escapeHtml(g.artist)}`,
         `+${g.netVotes} votes · added by ${escapeHtml(g.addedBy.name)}`
@@ -509,19 +545,19 @@ function recapHtml(recap) {
   if (recap.peoplesChampion) {
     const c = recap.peoplesChampion;
     rows.push(
-      recapRowHtml('&#128081;', "The people's champion", escapeHtml(c.name), `+${c.totalNetVotes} net votes across their picks`)
+      recapRowHtml(iconHtml('crown'), "The people's champion", escapeHtml(c.name), `+${c.totalNetVotes} net votes across their picks`)
     );
   }
   if (recap.topContributor) {
     const t = recap.topContributor;
     rows.push(
-      recapRowHtml('&#127925;', 'Top contributor', escapeHtml(t.name), `${t.played} of the songs that played`)
+      recapRowHtml(iconHtml('note'), 'Top contributor', escapeHtml(t.name), `${t.played} of the songs that played`)
     );
   }
   if (recap.impeached) {
     const i = recap.impeached;
     rows.push(
-      recapRowHtml('&#128078;', 'Impeached', escapeHtml(i.name), `${i.votedOut} pick${i.votedOut === 1 ? '' : 's'} voted out by the group`)
+      recapRowHtml(iconHtml('impeached'), 'Impeached', escapeHtml(i.name), `${i.votedOut} pick${i.votedOut === 1 ? '' : 's'} voted out by the group`)
     );
   }
 

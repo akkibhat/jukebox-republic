@@ -22,6 +22,21 @@
 
 * { box-sizing: border-box; }
 
+/* Every icon is a monoline stroke drawing that inherits its colour from
+   whatever it sits in, so an active tab or a gold award row tints its icon
+   for free. Sized in em so it scales with surrounding text unless a more
+   specific rule overrides it. */
+.icon {
+  width: 1.25em;
+  height: 1.25em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -136,6 +151,28 @@ input {
   border: 1px solid var(--border);
 }
 
+/* --- Compact brand lockup at the top of the session pages --- */
+
+.brand-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-bottom: 18px;
+}
+
+.brand-bar-mark {
+  width: 24px;
+  height: 24px;
+  color: var(--accent);
+}
+
+.brand-bar-name {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
 /* --- Session header: room code / QR on the host screen --- */
 
 .session-header {
@@ -190,6 +227,8 @@ input {
 
 .cohost-badge {
   color: var(--accent);
+  width: 14px;
+  height: 14px;
 }
 
 .chip-action {
@@ -200,11 +239,14 @@ input {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-dim);
-  font-size: 0.8rem;
-  line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.chip-action .icon {
+  width: 12px;
+  height: 12px;
 }
 
 .guest-names:empty {
@@ -236,7 +278,8 @@ input {
 
 .volume-icon {
   color: var(--text-dim);
-  font-size: 0.95rem;
+  width: 17px;
+  height: 17px;
 }
 
 /* --- Now playing --- */
@@ -338,6 +381,18 @@ input {
   display: none;
 }
 
+.mode-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.mode-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+
 .mode-toggle {
   flex-shrink: 0;
   background: var(--surface-raised);
@@ -351,9 +406,14 @@ input {
 
 /* --- Golden record badge + end-of-session election results --- */
 
+/* Sits inline with the track name, so it's nudged down to sit on the
+   text baseline rather than riding above it. */
 .golden-badge {
+  width: 15px;
+  height: 15px;
   margin-left: 6px;
-  font-size: 0.85rem;
+  color: var(--accent);
+  vertical-align: -2px;
 }
 
 .recap-card {
@@ -379,8 +439,14 @@ input {
 }
 
 .recap-icon {
-  font-size: 1.4rem;
+  display: flex;
   flex-shrink: 0;
+  color: var(--accent);
+}
+
+.recap-icon .icon {
+  width: 26px;
+  height: 26px;
 }
 
 .recap-info {
@@ -495,10 +561,17 @@ input {
   border: 1px solid var(--border);
   background: var(--surface-raised);
   color: var(--text);
-  font-size: 1.1rem;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* The most-tapped control in the app - drawn a touch heavier than the
+   other icons so it stays obvious at arm's length in a moving car. */
+.vote-icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2.2;
 }
 
 .vote-button.active-up { background: var(--accent-dim); border-color: var(--accent); }
@@ -537,8 +610,14 @@ input {
   border: 1px solid var(--border);
   background: var(--surface-raised);
   color: var(--text-dim);
-  font-size: 1.1rem;
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-button .icon {
+  width: 15px;
+  height: 15px;
 }
 
 /* --- Fixed bottom stack: tab nav (bottom-most) -> search bar -> results --- */
@@ -574,8 +653,8 @@ input {
 }
 
 .tab-button .tab-icon {
-  font-size: 1.15rem;
-  line-height: 1;
+  width: 21px;
+  height: 21px;
 }
 
 .tab-button.active {
