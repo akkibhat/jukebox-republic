@@ -26,15 +26,19 @@ export const config = {
     redirectUri: required('SPOTIFY_REDIRECT_URI'),
     // Scopes needed to read what's playing, control playback on the host's
     // device (the phone plugged into Android Auto), see the active device,
-    // and read the Autopilot Mix seed playlists (private/collaborative -
-    // see autopilotMix.js) - without the last two, Spotify 403s on every
-    // playlist tracks fetch even for playlists the host owns.
+    // read the Autopilot Mix seed playlists (private/collaborative - see
+    // autopilotMix.js), and create the export-to-playlist history dump
+    // (private - see history:export in sockets.js). Without the read
+    // scopes, Spotify 403s on every playlist tracks fetch even for
+    // playlists the host owns; without playlist-modify-private, playlist
+    // creation itself 403s.
     scopes: [
       'user-read-playback-state',
       'user-modify-playback-state',
       'user-read-currently-playing',
       'playlist-read-private',
       'playlist-read-collaborative',
+      'playlist-modify-private',
     ].join(' '),
   },
 };

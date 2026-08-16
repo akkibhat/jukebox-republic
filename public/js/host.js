@@ -1,5 +1,23 @@
-import { startQueueApp, ackToast, escapeHtml } from './queueApp.js';
+import { startQueueApp, ackToast, escapeHtml, showToast } from './queueApp.js';
 import { fetchJson } from './api.js';
+
+/**
+ * Saves the session's play history as a private Spotify playlist and opens
+ * it in a new tab on success - the toast alone wouldn't be clickable, and a
+ * host who just asked for this wants to actually see the result, not just
+ * a confirmation that something happened.
+ */
+function exportHistory(socket, onDone) {
+  socket.emit('history:export', {}, (response) => {
+    if (response?.error) {
+      showToast(response.error);
+    } else {
+      showToast('Saved to Spotify - opening playlist…');
+      window.open(response.url, '_blank');
+    }
+    onDone?.();
+  });
+}
 
 const sessionId = new URLSearchParams(window.location.search).get('session');
 
@@ -33,7 +51,20 @@ if (!sessionId) {
     .then((socket) => {
       document.getElementById('end-session-button').addEventListener('click', () => {
         if (!confirm("Stop the music for everyone? This can't be undone.")) return;
-        socket.emit('session:end');
+
+        if (confirm("Save this session's play history as a Spotify playlist?")) {
+          // Export first, while the session (and its socket) is still
+          // alive - the moment session:end lands, the server tears the
+          // session down and force-disconnects every socket, which would
+          // leave nothing for a save attempted afterward to act on.
+          exportHistory(socket, () => socket.emit('session:end'));
+        } else {
+          socket.emit('session:end');
+        }
+      });
+
+      document.getElementById('export-history-button').addEventListener('click', () => {
+        exportHistory(socket);
       });
 
       // The slider lives here in the session header (rendered once) rather

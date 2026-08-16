@@ -845,6 +845,10 @@ input {
   margin: 0 0 16px;
 }
 
+.export-history-button {
+  margin-bottom: 16px;
+}
+
 /* --- Host's "add a playlist to the Autopilot Mix" box --- */
 
 .autopilot-admin {

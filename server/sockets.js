@@ -19,7 +19,16 @@ import { nextRoundForGuest, applyVote } from './queueFairness.js';
 import { buildSessionRecap } from './sessionRecap.js';
 import { broadcastState, roomName } from './broadcast.js';
 import { startPlaybackLoop, stopPlaybackLoop, skipCurrentTrack } from './playbackEngine.js';
-import { pausePlayback, resumePlayback, setVolume, getPlaylistTracks, getAvailableDevices, transferPlayback } from './spotifyApi.js';
+import {
+  pausePlayback,
+  resumePlayback,
+  setVolume,
+  getPlaylistTracks,
+  getAvailableDevices,
+  transferPlayback,
+  createPlaylist,
+  addTracksToPlaylist,
+} from './spotifyApi.js';
 import { ensureFreshToken } from './spotifyAuth.js';
 
 // How long a guest whose socket disconnects still counts as "connected" -
@@ -281,6 +290,39 @@ export function registerSocketHandlers(io) {
       } catch (err) {
         console.error('[sockets] playback:setDevice failed:', err.message);
         ack?.({ error: 'Could not switch devices. Try again in a moment.' });
+      }
+    });
+
+    /**
+     * Saves everything that's played this session as a private playlist on
+     * the host's own Spotify account - explicitly opt-in (a button in the
+     * History tab, and a confirm prompt right before "Stop spinning" - see
+     * host.js) rather than automatic, since not every drive is worth a
+     * permanent playlist. True-host-only: it writes to the host's personal
+     * library, not something a co-host should trigger on their behalf.
+     * Oldest-first order (playHistory is stored newest-first, for the UI
+     * list) so the playlist reads like the night actually went.
+     */
+    socket.on('history:export', async (_payload, ack) => {
+      const session = requirePermission(socket, ack, 'host');
+      if (!session) return;
+      if (session.playHistory.length === 0) return ack?.({ error: "Nothing's played yet." });
+
+      try {
+        const accessToken = await ensureFreshToken(session);
+        const date = new Date().toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+        const playlist = await createPlaylist(
+          accessToken,
+          session.host.spotifyId,
+          `Jukebox Republic — ${date}`,
+          `Played in session ${session.roomCode} - made with Jukebox Republic.`
+        );
+        const uris = [...session.playHistory].reverse().map((item) => item.uri);
+        await addTracksToPlaylist(accessToken, playlist.id, uris);
+        ack?.({ ok: true, url: playlist.externalUrl });
+      } catch (err) {
+        console.error(`[sockets] history:export failed for ${session.roomCode}:`, err.message);
+        ack?.({ error: 'Could not save to Spotify. Try again in a moment.' });
       }
     });
 

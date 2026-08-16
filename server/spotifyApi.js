@@ -229,3 +229,32 @@ export async function setVolume(accessToken, volumePercent) {
 export async function resumePlayback(accessToken) {
   await spotifyFetch('/me/player/play', accessToken, { method: 'PUT' });
 }
+
+/** Creates a private playlist under the host's own account - the "export history" feature. */
+export async function createPlaylist(accessToken, userId, name, description) {
+  const data = await spotifyFetch(`/users/${encodeURIComponent(userId)}/playlists`, accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ name, description, public: false }),
+  });
+  return { id: data.id, externalUrl: data.external_urls?.spotify || null };
+}
+
+// Spotify caps a single "add tracks" call at 100 uris.
+const ADD_TRACKS_CHUNK_SIZE = 100;
+
+/**
+ * Adds tracks to a playlist in the given order - chunked because Spotify
+ * rejects more than 100 uris per call. Chunks are sent sequentially (not
+ * Promise.all) since each POST appends to the end of the playlist in
+ * whatever order the calls land in, and out-of-order concurrent requests
+ * would scramble the play-history ordering this exists to preserve.
+ */
+export async function addTracksToPlaylist(accessToken, playlistId, uris) {
+  for (let i = 0; i < uris.length; i += ADD_TRACKS_CHUNK_SIZE) {
+    const chunk = uris.slice(i, i + ADD_TRACKS_CHUNK_SIZE);
+    await spotifyFetch(`/playlists/${playlistId}/tracks`, accessToken, {
+      method: 'POST',
+      body: JSON.stringify({ uris: chunk }),
+    });
+  }
+}
