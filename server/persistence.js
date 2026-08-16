@@ -35,9 +35,11 @@ let db = null;
 /**
  * Persistence is on only when credentials are configured. Resolved lazily
  * (first call) rather than at import time so module evaluation order
- * relative to dotenv doesn't matter.
+ * relative to dotenv doesn't matter. Exported so other modules needing
+ * Firestore (seedPlaylistCache.js) share this one client/config instead of
+ * each standing up their own.
  */
-function getDb() {
+export function getDb() {
   if (db !== null) return db;
 
   const configured = process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIRESTORE_PROJECT_ID;

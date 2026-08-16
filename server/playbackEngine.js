@@ -5,10 +5,11 @@
 // endpoint, this engine explicitly commands "play track X now" each time a
 // track needs to start, on a timer that watches the current track's
 // progress and advances when it's about to end.
-import { getPlaybackState, getAvailableDevices, getPlaylistTracks, playTrack } from './spotifyApi.js';
+import { getPlaybackState, getAvailableDevices, playTrack } from './spotifyApi.js';
 import { ensureFreshToken } from './spotifyAuth.js';
 import { sortQueue } from './queueFairness.js';
 import { nextUnusedSeedPlaylist } from './autopilotMix.js';
+import { getSeedPlaylistTracks } from './seedPlaylistCache.js';
 import {
   addToSkippedSongs,
   addToPlayHistory,
@@ -324,7 +325,7 @@ async function topUpAutopilotMix(session, accessToken) {
   session.usedSeedPlaylistIds.push(next.id);
 
   try {
-    const tracks = await getPlaylistTracks(accessToken, next.id);
+    const tracks = await getSeedPlaylistTracks(accessToken, next);
     addToFallbackTracks(session, tracks);
     console.log(
       `[playback] session ${session.roomCode} topped up Autopilot Mix from "${next.label}" (${session.fallbackTracks.length} tracks now in pool)`

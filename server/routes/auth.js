@@ -4,9 +4,10 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
 import { buildAuthorizeUrl, exchangeCodeForTokens } from '../spotifyAuth.js';
-import { getCurrentUserProfile, getPlaylistTracks } from '../spotifyApi.js';
+import { getCurrentUserProfile } from '../spotifyApi.js';
 import { createSession, addToFallbackTracks } from '../sessionStore.js';
 import { pickSeedPlaylist } from '../autopilotMix.js';
+import { getSeedPlaylistTracks } from '../seedPlaylistCache.js';
 
 export const authRouter = Router();
 
@@ -50,7 +51,7 @@ authRouter.get('/callback', async (req, res) => {
     const seedPlaylist = pickSeedPlaylist();
     session.usedSeedPlaylistIds.push(seedPlaylist.id);
     try {
-      const tracks = await getPlaylistTracks(tokens.accessToken, seedPlaylist.id);
+      const tracks = await getSeedPlaylistTracks(tokens.accessToken, seedPlaylist);
       addToFallbackTracks(session, tracks);
       console.log(
         `[auth] seeded Autopilot Mix for ${session.roomCode} from "${seedPlaylist.label}" (${session.fallbackTracks.length} tracks)`
