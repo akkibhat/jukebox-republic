@@ -183,6 +183,20 @@ input {
   font-size: 1.05rem;
 }
 
+/* Small, deliberately unobtrusive build tag - not something a guest needs
+   to notice, just something to point to when debugging "which version is
+   this" after a deploy. Sits below the Up next queue on the Home tab,
+   in normal document flow above the fixed tab-bar - never overlapping or
+   merged into the bottom nav itself. */
+.app-version {
+  display: block;
+  margin-top: 16px;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  opacity: 0.6;
+  text-align: center;
+}
+
 /* --- Session header: room code / QR on the host screen --- */
 
 .session-header {
