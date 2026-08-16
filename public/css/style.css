@@ -696,11 +696,14 @@ input {
 
 .search-results:empty { display: none; }
 
+/* Sits directly under a section title, so it takes no top margin of its
+   own - the title's 10px bottom margin is the whole gap, matching how
+   the lists sit under their titles on every other tab. */
 .tab-blurb {
   color: var(--text-dim);
   font-size: 0.85rem;
   line-height: 1.4;
-  margin: 20px 0 16px;
+  margin: 0 0 16px;
 }
 
 /* --- Host's "add a playlist to the Autopilot Mix" box --- */
