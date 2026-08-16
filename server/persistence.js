@@ -62,16 +62,19 @@ function getDb() {
 // Votes become plain objects (guestId -> 'up'|'down') rather than arrays of
 // pairs because Firestore also refuses arrays nested directly inside arrays.
 
+/** Track with a votes Map -> plain object, since Firestore can't store Maps. */
 function serializeVotedItem(item) {
   if (!item) return null;
   return { ...item, votes: Object.fromEntries(item.votes ?? []) };
 }
 
+/** Inverse of serializeVotedItem - rebuilds the votes Map on the way back in. */
 function reviveVotedItem(item) {
   if (!item) return null;
   return { ...item, votes: new Map(Object.entries(item.votes ?? {})) };
 }
 
+/** Whole session -> Firestore-safe shape: Maps become arrays/objects, Sets become arrays. */
 function serializeSession(session) {
   return {
     ...session,
@@ -83,6 +86,7 @@ function serializeSession(session) {
   };
 }
 
+/** Inverse of serializeSession - restores the Maps and Sets the rest of the app expects. */
 function reviveSession(data) {
   return {
     ...data,

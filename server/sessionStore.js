@@ -12,6 +12,7 @@ import { deletePersisted } from './persistence.js';
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I - easy to read aloud
 
+/** Random join code, from an alphabet with no lookalike characters (see ROOM_CODE_CHARS). */
 function generateRoomCode(length = 5) {
   let code = '';
   for (let i = 0; i < length; i++) {
@@ -25,6 +26,7 @@ const sessions = new Map();
 /** roomCode -> sessionId, so guests can join by typing/scanning a short code. */
 const roomCodeIndex = new Map();
 
+/** Creates a session with a unique room code. Called once, right after the host's Spotify login. */
 export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
   const id = randomUUID();
   let roomCode = generateRoomCode();
@@ -56,15 +58,18 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
   return session;
 }
 
+/** Looks up a session by its internal id, or undefined if it's over. */
 export function getSession(sessionId) {
   return sessions.get(sessionId);
 }
 
+/** Looks up a session by the short code guests type in. Case-insensitive. */
 export function getSessionByRoomCode(roomCode) {
   const id = roomCodeIndex.get(roomCode.toUpperCase());
   return id ? sessions.get(id) : undefined;
 }
 
+/** Ends a session for good: drops it from memory, frees its room code, and deletes its saved copy. */
 export function endSession(sessionId) {
   const session = sessions.get(sessionId);
   if (!session) return;
@@ -85,6 +90,11 @@ export function restoreSessionIntoStore(session) {
   roomCodeIndex.set(session.roomCode, session.id);
 }
 
+/**
+ * Adds a guest, or marks a returning one connected again. Reconnecting
+ * keeps their submissionCount, so a dropped connection doesn't reset
+ * someone's place in the fair rotation.
+ */
 export function upsertGuest(session, guestId, name) {
   const existing = session.guests.get(guestId);
   if (existing) {
@@ -97,6 +107,7 @@ export function upsertGuest(session, guestId, name) {
   return guest;
 }
 
+/** How many guests are connected right now - drives the downvote threshold. */
 export function connectedGuestCount(session) {
   let count = 0;
   for (const guest of session.guests.values()) {
@@ -121,6 +132,7 @@ export function connectedGuests(session) {
   return guests;
 }
 
+/** Wraps a Spotify track as a queue entry, tagged with who added it and their rotation round. */
 export function makeQueueItem({ track, guest, round, duplicateReason = null }) {
   return {
     id: randomUUID(),
@@ -241,20 +253,17 @@ export function removeFromFallbackTracks(session, uri) {
   session.fallbackTracks = session.fallbackTracks.filter((t) => t.uri !== uri);
 }
 
+// Capped because a whole session is persisted as a single Firestore
+// document, and those have a hard 1 MiB ceiling - three max-size playlists
+// measure ~1.5 MiB and would make every save fail. Still far more music
+// than one session can play: at ~3.5 min a track it's over a day of it.
+const FALLBACK_POOL_LIMIT = 600;
+
 /**
  * Merges freshly-fetched tracks into the Autopilot Mix, skipping uris
  * already pooled - the same song often appears on more than one seed
  * playlist, and there's no reason to offer it twice.
- *
- * The pool is capped because the whole session is persisted as a single
- * Firestore document, and those have a hard 1 MiB ceiling. A few large
- * playlists (2,000 tracks each, see MAX_PLAYLIST_PAGES) would blow past
- * it and make every save fail. The cap is far more music than one session
- * can play anyway - at ~3.5 min a track it's over a day of continuous
- * fallback.
  */
-const FALLBACK_POOL_LIMIT = 600;
-
 export function addToFallbackTracks(session, tracks) {
   const existingUris = new Set(session.fallbackTracks.map((t) => t.uri));
   for (const track of tracks) {

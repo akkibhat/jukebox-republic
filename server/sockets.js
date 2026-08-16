@@ -22,6 +22,7 @@ import { startPlaybackLoop, stopPlaybackLoop, skipCurrentTrack } from './playbac
 import { pausePlayback, resumePlayback, setVolume, getPlaylistTracks } from './spotifyApi.js';
 import { ensureFreshToken } from './spotifyAuth.js';
 
+/** Wires up every real-time event a connected phone can send. Called once at startup. */
 export function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
     socket.on('join', async ({ sessionId, guestId, name, isHost }, ack) => {

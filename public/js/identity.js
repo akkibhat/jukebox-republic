@@ -7,6 +7,7 @@
 const ID_KEY = 'jukebox_republic_guest_id';
 const NAME_KEY = 'jukebox_republic_guest_name';
 
+/** This phone's stable id, minted once and reused on every rejoin. */
 export function getOrCreateGuestId() {
   let id = localStorage.getItem(ID_KEY);
   if (!id) {
@@ -16,10 +17,12 @@ export function getOrCreateGuestId() {
   return id;
 }
 
+/** The name this phone last joined under, or '' if they've never set one. */
 export function getStoredName() {
   return localStorage.getItem(NAME_KEY) || '';
 }
 
+/** Remembers the name so returning guests skip the prompt. */
 export function setStoredName(name) {
   localStorage.setItem(NAME_KEY, name);
 }

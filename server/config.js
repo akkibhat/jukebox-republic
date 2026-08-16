@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+/** Reads an env var, failing fast at startup rather than mid-session if it's missing. */
 function required(name) {
   const value = process.env[name];
   if (!value) {

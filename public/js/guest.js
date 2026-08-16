@@ -8,6 +8,7 @@ if (codeFromUrl) {
   showCodeForm();
 }
 
+/** Asks for a session code - shown when someone lands on the guest page without one in the URL. */
 function showCodeForm() {
   const header = document.getElementById('session-header');
   header.innerHTML = `
@@ -24,6 +25,7 @@ function showCodeForm() {
   });
 }
 
+/** Resolves a code to a session and starts the shared queue UI, or re-prompts if it's wrong. */
 function joinByCode(code) {
   fetch(`/api/sessions/by-code/${encodeURIComponent(code)}`)
     .then((res) => {
@@ -44,6 +46,7 @@ function joinByCode(code) {
     });
 }
 
+/** Escapes text before it goes into innerHTML - guest-chosen names reach the DOM this way. */
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str ?? '';

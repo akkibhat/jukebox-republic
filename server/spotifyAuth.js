@@ -7,6 +7,7 @@ import { config } from './config.js';
 const AUTHORIZE_URL = 'https://accounts.spotify.com/authorize';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
+/** The Spotify consent URL the host is sent to when they start a session. */
 export function buildAuthorizeUrl(state) {
   const params = new URLSearchParams({
     response_type: 'code',
@@ -18,6 +19,7 @@ export function buildAuthorizeUrl(state) {
   return `${AUTHORIZE_URL}?${params.toString()}`;
 }
 
+/** Client id/secret as the Basic header Spotify's token endpoint expects. */
 function basicAuthHeader() {
   const creds = `${config.spotify.clientId}:${config.spotify.clientSecret}`;
   return `Basic ${Buffer.from(creds).toString('base64')}`;
@@ -69,6 +71,7 @@ export async function refreshAccessToken(refreshToken) {
   return toTokenRecord({ ...data, refresh_token: data.refresh_token || refreshToken });
 }
 
+/** Spotify's token response -> the shape stored on a session, with an absolute expiry. */
 function toTokenRecord(data) {
   return {
     accessToken: data.access_token,

@@ -81,10 +81,12 @@ export function sortQueue(queue, mode = 'fair') {
  */
 const WAIT_BOOST_MS = 10 * 60 * 1000;
 
+/** Net votes plus the waiting bonus - the single number crowd mode sorts on. */
 function crowdScore(item, now) {
   return item.netVotes + (now - item.addedAt) / WAIT_BOOST_MS;
 }
 
+/** Highest crowd score first; equal scores fall back to whoever's waited longest. */
 function sortByCrowdChoice(queue) {
   // One shared timestamp per sort, so every item is scored against the
   // same "now" and the comparator stays consistent mid-sort.

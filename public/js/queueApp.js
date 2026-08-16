@@ -78,6 +78,7 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
 
 // --- Name capture -----------------------------------------------------
 
+/** Resolves once we know what to call this guest, prompting only if they haven't joined before. */
 function ensureName() {
   const existing = getStoredName();
   if (existing) return Promise.resolve(existing);
@@ -101,6 +102,7 @@ function ensureName() {
 
 // --- Rendering ----------------------------------------------------------
 
+/** Entry point for every server update - repaints the whole UI from one state payload. */
 function renderState(state) {
   havePowers = Boolean(state.youHavePowers);
 
@@ -177,6 +179,7 @@ function findGoldenRecord(history) {
   return golden;
 }
 
+/** The now-playing card: art, votes, progress, and host controls for whoever holds powers. */
 function renderNowPlaying(track, playbackBlockedReason, isPlaying, progressMs) {
   const container = document.getElementById('now-playing');
   if (!container) return;
@@ -236,6 +239,7 @@ function tickProgressBar() {
   elapsed.textContent = fmtTime(ms);
 }
 
+/** Milliseconds as m:ss. */
 function fmtTime(ms) {
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -345,6 +349,7 @@ function goldenBadgeHtml(track) {
   return `<span class="golden-badge" title="Golden record - the session's most upvoted song (+${track.netVotes})">&#129351;</span>`;
 }
 
+/** Up/down buttons with the current net score, highlighting whichever way this guest voted. */
 function voteButtonsHtml(track) {
   const upClass = track.myVote === 'up' ? 'active-up' : '';
   const downClass = track.myVote === 'down' ? 'active-down' : '';
@@ -357,6 +362,7 @@ function voteButtonsHtml(track) {
   `;
 }
 
+/** The little x for pulling a song back out - only rendered where removal is allowed. */
 function removeButtonHtml() {
   return `<button class="remove-button" title="Remove your song">&times;</button>`;
 }
@@ -417,10 +423,12 @@ function hostControlsHtml(isPlaying) {
   `;
 }
 
+/** Replaces the page with a dead end - a bad code, an ended session, or being kicked. */
 function renderFatalError(message) {
   document.body.innerHTML = `<main class="screen screen-center"><p>${escapeHtml(message)}</p><a class="button button-secondary" href="/">Back home</a></main>`;
 }
 
+/** The goodbye screen, with the election results when anything actually played. */
 function renderSessionEnded(recap) {
   document.body.innerHTML = `
     <main class="screen screen-center">
@@ -492,6 +500,7 @@ function recapHtml(recap) {
   `;
 }
 
+/** One award row in the results card. */
 function recapRowHtml(icon, label, main, sub) {
   return `
     <div class="recap-row">
@@ -507,6 +516,7 @@ function recapRowHtml(icon, label, main, sub) {
 
 // --- Interactions ---------------------------------------------------------
 
+/** Routes every button tap in the app to its socket event. */
 function wireClicks(socket) {
   // Delegated listener on the whole document: now-playing, queue-list, and
   // the read-only lists all get replaced wholesale on every state update,
@@ -593,6 +603,7 @@ function wireClicks(socket) {
 }
 
 /** Bottom tab nav: swaps which .tab-panel is visible and highlights the active button. Pure UI state, no server round-trip. */
+/** Bottom tab nav: swaps which .tab-panel is visible. Pure UI state, no server round-trip. */
 function wireTabs() {
   const tabBar = document.getElementById('tab-bar');
   if (!tabBar) return;
@@ -611,6 +622,7 @@ function wireTabs() {
   });
 }
 
+/** The song search box, debounced so a Spotify call doesn't fire per keystroke. */
 function wireSearch(sessionId, socket) {
   const input = document.getElementById('search-input');
   const results = document.getElementById('search-results');
@@ -629,6 +641,7 @@ function wireSearch(sessionId, socket) {
   });
 }
 
+/** Runs a track search and renders tappable results above the search bar. */
 async function runSearch(sessionId, query, resultsEl, socket) {
   const response = await fetch(`/api/sessions/${sessionId}/search?q=${encodeURIComponent(query)}`);
   const data = await response.json();
@@ -695,6 +708,7 @@ function wirePlaylistSearch(sessionId, socket) {
   });
 }
 
+/** Searches Spotify's playlists for the host's Autopilot Mix box. */
 async function runPlaylistSearch(sessionId, query, resultsEl, inputEl, socket) {
   const response = await fetch(`/api/sessions/${sessionId}/playlist-search?q=${encodeURIComponent(query)}`);
   const data = await response.json();
@@ -702,6 +716,7 @@ async function runPlaylistSearch(sessionId, query, resultsEl, inputEl, socket) {
   renderPlaylistResults(resultsEl, inputEl, data.results, socket);
 }
 
+/** Playlist rows with an add button that folds the whole playlist into the mix. */
 function renderPlaylistResults(resultsEl, inputEl, playlists, socket) {
   if (playlists.length === 0) {
     resultsEl.innerHTML = '<p class="empty-state">No playlists found.</p>';
@@ -761,6 +776,7 @@ export function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove('visible'), 2500);
 }
 
+/** Escapes text before it goes into innerHTML - track and guest names reach the DOM this way. */
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str ?? '';

@@ -61,6 +61,7 @@ export function startPlaybackLoop(session, io) {
   loops.set(session.id, loop);
 }
 
+/** Stops a session's watch loop. Safe to call for a session that never had one. */
 export function stopPlaybackLoop(sessionId) {
   const loop = loops.get(sessionId);
   if (loop) clearInterval(loop.handle);
@@ -77,6 +78,10 @@ function isIdle(session) {
   return connectedGuestCount(session) === 0 && !session.isPlaying;
 }
 
+/**
+ * One tick of the watch loop: reads what Spotify is actually doing, then
+ * either adopts it, advances the queue, or just refreshes progress.
+ */
 async function pollAndAdvance(session, io, ticks) {
   const accessToken = await ensureFreshToken(session);
   const state = await getPlaybackState(accessToken);

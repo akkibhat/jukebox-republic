@@ -5,6 +5,12 @@
 
 const API_BASE = 'https://api.spotify.com/v1';
 
+/**
+ * Every Spotify call goes through here: adds auth, turns non-2xx into
+ * errors carrying `.status` (so callers can tell a rejected request from a
+ * network failure), and tolerates the empty/non-JSON bodies the playback
+ * endpoints sometimes return on success.
+ */
 async function spotifyFetch(path, accessToken, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -47,6 +53,7 @@ async function spotifyFetch(path, accessToken, options = {}) {
   }
 }
 
+/** Trims Spotify's track object down to the handful of fields the app actually shows. */
 function toTrackSummary(track) {
   return {
     uri: track.uri,
@@ -117,6 +124,7 @@ export async function searchPlaylists(accessToken, query, limit = 10) {
 const PLAYLIST_PAGE_SIZE = 100;
 const MAX_PLAYLIST_PAGES = 20;
 
+/** Fetches a playlist's playable tracks, paging until Spotify runs out (see the note above). */
 export async function getPlaylistTracks(accessToken, playlistId) {
   const tracks = [];
   let path = `/playlists/${playlistId}/tracks?limit=${PLAYLIST_PAGE_SIZE}&fields=items(track(uri,name,artists,album,duration_ms,explicit)),next`;
@@ -180,6 +188,7 @@ export async function playTrack(accessToken, uri, deviceId) {
   });
 }
 
+/** Pauses whatever the host's account is playing. */
 export async function pausePlayback(accessToken) {
   await spotifyFetch('/me/player/pause', accessToken, { method: 'PUT' });
 }
@@ -194,6 +203,7 @@ export async function setVolume(accessToken, volumePercent) {
   await spotifyFetch(`/me/player/volume?volume_percent=${volumePercent}`, accessToken, { method: 'PUT' });
 }
 
+/** Resumes playback where it was paused, without changing the track. */
 export async function resumePlayback(accessToken) {
   await spotifyFetch('/me/player/play', accessToken, { method: 'PUT' });
 }
