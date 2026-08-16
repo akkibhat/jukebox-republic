@@ -2,6 +2,53 @@ import { startQueueApp, ackToast, escapeHtml, showToast } from './queueApp.js';
 import { fetchJson } from './api.js';
 
 /**
+ * Draws the app's mark over the center of the #qr-code image once both it
+ * and favicon.svg have loaded, replacing the plain code with a branded
+ * one. Safe to overlay because the server generates the code with High
+ * error correction (see routes/auth.js), which tolerates ~30% of the code
+ * being obscured - the logo here is kept well under that. Purely cosmetic:
+ * any failure (a blocked/slow image load) just leaves the plain QR code in
+ * place rather than breaking anything else on the page.
+ */
+function embedLogoInQrCode() {
+  const qrImg = document.getElementById('qr-code');
+  if (!qrImg) return;
+
+  const qr = new Image();
+  const logo = new Image();
+  let loadedCount = 0;
+
+  const onBothLoaded = () => {
+    loadedCount += 1;
+    if (loadedCount < 2) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = qr.naturalWidth;
+    canvas.height = qr.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(qr, 0, 0);
+
+    const logoSize = canvas.width * 0.22;
+    const x = (canvas.width - logoSize) / 2;
+    const y = (canvas.height - logoSize) / 2;
+    const pad = logoSize * 0.12;
+
+    // A white halo separates the logo's own dark background from
+    // whichever QR modules happen to sit right behind it.
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x - pad, y - pad, logoSize + pad * 2, logoSize + pad * 2);
+    ctx.drawImage(logo, x, y, logoSize, logoSize);
+
+    qrImg.src = canvas.toDataURL('image/png');
+  };
+
+  qr.onload = onBothLoaded;
+  logo.onload = onBothLoaded;
+  qr.src = qrImg.src;
+  logo.src = '/favicon.svg';
+}
+
+/**
  * Saves the session's play history as a private Spotify playlist and opens
  * it in a new tab on success - the toast alone wouldn't be clickable, and a
  * host who just asked for this wants to actually see the result, not just
@@ -51,7 +98,7 @@ if (!sessionId) {
         <div class="guest-names" id="guest-names"></div>
         <div class="room-code">${info.roomCode}</div>
         <p>Have friends scan this or go to <strong>${new URL(info.joinUrl).host}</strong> and enter the code.</p>
-        <img src="${info.qrCodeDataUrl}" alt="QR code to join the spin" />
+        <img id="qr-code" src="${info.qrCodeDataUrl}" alt="QR code to join the spin" />
         <div class="volume-row" id="volume-row">
           <div class="volume-controls" id="volume-controls">
             <svg class="icon volume-icon"><use href="#icon-volume-low"/></svg>
@@ -65,6 +112,7 @@ if (!sessionId) {
         <div class="device-list" id="device-list" style="display: none;"></div>
         <button class="button button-secondary end-session-button" id="end-session-button" type="button">Stop spinning</button>
       `;
+      embedLogoInQrCode();
       return startQueueApp(sessionId, { isHost: true });
     })
     .then((socket) => {

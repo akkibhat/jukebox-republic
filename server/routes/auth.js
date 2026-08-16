@@ -61,8 +61,10 @@ authRouter.get('/callback', async (req, res) => {
 
     // Rendered once here rather than on every "here's how to join" fetch -
     // session.joinUrl is fixed for the session's whole life, so the PNG
-    // would come out identical every time anyway.
-    session.qrCodeDataUrl = await QRCode.toDataURL(session.joinUrl);
+    // would come out identical every time anyway. High error correction
+    // (tolerates ~30% of the code being obscured) is what lets host.js
+    // safely draw the app's logo over the center client-side.
+    session.qrCodeDataUrl = await QRCode.toDataURL(session.joinUrl, { errorCorrectionLevel: 'H' });
 
     // Seeded once, right at session start, rather than on-demand the first
     // time the queue runs dry - that would add a delay right when everyone
