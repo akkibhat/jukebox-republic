@@ -156,15 +156,7 @@ function renderState(state) {
     guestCountEl.textContent = `${state.connectedGuestCount} connected`;
   }
   renderGuestChips(state.guests || []);
-
-  // Only exists on host.html - guest.html has no volume-controls element,
-  // so this is a no-op there. Hidden specifically on a confirmed `false`;
-  // `null` means Spotify hasn't reported yet (no active device this tick),
-  // which shouldn't make the slider flash away on every brief gap.
-  const volumeControls = document.getElementById('volume-controls');
-  if (volumeControls) {
-    volumeControls.style.display = state.supportsVolume === false ? 'none' : 'flex';
-  }
+  renderVolumeControls(state);
 
   // Re-anchor the progress bar to the server's number the moment it
   // arrives; the tick timer takes over from here until the next update.
@@ -190,10 +182,11 @@ function renderState(state) {
 
 /**
  * The "who's here" row as chips instead of a plain name list. Everyone
- * sees names and co-host stars; anyone with powers additionally gets a
- * kick button per chip, and the true host gets the promote/demote star
- * toggle. (The server enforces all of it regardless - these buttons are
- * just affordances.)
+ * sees names and a co-host star; the true host's star is also the
+ * promote/demote toggle (filled when the guest already holds co-host
+ * powers, outline otherwise), so it doubles as status and control
+ * instead of showing a separate static badge next to it. (The server
+ * enforces all of it regardless - this button is just an affordance.)
  */
 function renderGuestChips(guests) {
   const el = document.getElementById('guest-names');
@@ -202,10 +195,12 @@ function renderGuestChips(guests) {
   el.innerHTML = guests
     .map((guest) => {
       const isMe = guest.id === myGuestId;
-      const badge = guest.isCoHost ? iconHtml('star', 'icon cohost-badge') : '';
-      const promote =
-        isHostView && !isMe
-          ? `<button class="chip-action promote-button" data-guest-id="${guest.id}" data-promote="${guest.isCoHost ? 'false' : 'true'}" title="${guest.isCoHost ? 'Remove co-host powers' : 'Make co-host'}">${iconHtml('star')}</button>`
+      const showsPromote = isHostView && !isMe;
+      // Only shown when the promote button (below) isn't already
+      // conveying co-host status via its filled state.
+      const badge = !showsPromote && guest.isCoHost ? iconHtml('star', 'icon cohost-badge') : '';
+      const promote = showsPromote
+        ? `<button class="chip-action promote-button${guest.isCoHost ? ' promote-button-active' : ''}" data-guest-id="${guest.id}" data-promote="${guest.isCoHost ? 'false' : 'true'}" title="${guest.isCoHost ? 'Remove co-host powers' : 'Make co-host'}">${iconHtml('star')}</button>`
           : '';
       const kick =
         havePowers && !isMe
@@ -214,6 +209,19 @@ function renderGuestChips(guests) {
       return `<span class="guest-chip">${escapeHtml(guest.name)}${isMe ? ' (you)' : ''}${badge}${promote}${kick}</span>`;
     })
     .join('');
+}
+
+/**
+ * Shows or hides the volume slider based on what the current device
+ * supports. Only exists on host.html - guest.html has no volume-controls
+ * element, so this is a no-op there. Hidden specifically on a confirmed
+ * `false`; `null` means Spotify hasn't reported yet (no active device this
+ * tick), which shouldn't make the slider flash away on every brief gap.
+ */
+function renderVolumeControls(state) {
+  const volumeControls = document.getElementById('volume-controls');
+  if (!volumeControls) return;
+  volumeControls.style.display = state.supportsVolume === false ? 'none' : 'flex';
 }
 
 /** The now-playing card: art, votes, progress, and host controls for whoever holds powers. */
@@ -589,55 +597,86 @@ function recapRowHtml(icon, label, main, sub) {
 
 // --- Interactions ---------------------------------------------------------
 
-// Long-press state for the guest chip's remove/kick button. A tap marks a
-// guest as gone-for-now (reversible, no ban); holding it down escalates to
-// the permanent, banning kick. Both live on the same button so there's only
-// one control to find on a crowded chip row.
-const KICK_LONG_PRESS_MS = 550;
-let kickPressTimer = null;
-let kickLongPressFired = false;
+/**
+ * Wires a tap-vs-hold gesture onto every element matching `selector`, via
+ * delegated listeners on `document` so it keeps working across content
+ * that gets replaced wholesale on re-render (same reasoning as wireClicks
+ * below). A normal click calls `onTap`; holding the pointer down for `ms`
+ * instead calls `onHold` and suppresses the click that follows it, so a
+ * long press never also triggers the tap action.
+ *
+ * pointerdown/up rather than mousedown/touchstart+mouseup: one pair covers
+ * mouse, touch, and pen without duplicating the timer logic per input type.
+ */
+function bindLongPress(selector, { onTap, onHold, ms, pressingClass }) {
+  let timer = null;
+  let fired = false;
+
+  document.addEventListener('pointerdown', (event) => {
+    const el = event.target.closest(selector);
+    if (!el) return;
+    fired = false;
+    el.classList.add(pressingClass);
+    timer = setTimeout(() => {
+      fired = true;
+      el.classList.remove(pressingClass);
+      onHold(el);
+    }, ms);
+  });
+
+  // Releasing early (a normal tap) or dragging off the element both cancel
+  // the pending hold - only an uninterrupted press should ever reach it.
+  const cancelHold = (event) => {
+    event.target.closest(selector)?.classList.remove(pressingClass);
+    clearTimeout(timer);
+  };
+  document.addEventListener('pointerup', cancelHold);
+  document.addEventListener('pointerleave', cancelHold, true);
+  document.addEventListener('pointercancel', cancelHold);
+
+  // Phones treat a held-down touch as "show the context menu" by default,
+  // which would pop up over the hold action. Suppress it only here.
+  document.addEventListener('contextmenu', (event) => {
+    if (event.target.closest(selector)) event.preventDefault();
+  });
+
+  document.addEventListener('click', (event) => {
+    const el = event.target.closest(selector);
+    if (!el) return;
+    // The hold above already handled this press - don't also run the tap
+    // action for the click event that follows it.
+    if (fired) {
+      fired = false;
+      return;
+    }
+    onTap(el);
+  });
+}
 
 /** Routes every button tap in the app to its socket event. */
 function wireClicks(socket) {
+  // A tap on a guest chip's action button marks them as gone-for-now
+  // (reversible, no ban); holding it down escalates to the permanent,
+  // banning kick. Both live on the same button so there's only one
+  // control to find on a crowded chip row.
+  bindLongPress('.kick-button', {
+    ms: 550,
+    pressingClass: 'kick-button-pressing',
+    onTap: (kickButton) => {
+      if (!confirm(`Mark ${kickButton.dataset.guestName} as left? They can rejoin anytime if they come back.`)) return;
+      socket.emit('guest:remove', { guestId: kickButton.dataset.guestId }, ackToast);
+    },
+    onHold: (kickButton) => {
+      if (confirm(`Remove ${kickButton.dataset.guestName} from the session? They won't be able to rejoin.`)) {
+        socket.emit('guest:kick', { guestId: kickButton.dataset.guestId }, ackToast);
+      }
+    },
+  });
+
   // Delegated listener on the whole document: now-playing, queue-list, and
   // the read-only lists all get replaced wholesale on every state update,
   // so binding directly to buttons would mean re-binding after every
   // render. One listener up top avoids that entirely.
-
-  // pointerdown/up rather than mousedown/touchstart: one pair covers mouse,
-  // touch, and pen without duplicating the timer logic per input type.
-  document.addEventListener('pointerdown', (event) => {
-    const kickButton = event.target.closest('.kick-button');
-    if (!kickButton) return;
-    kickLongPressFired = false;
-    kickButton.classList.add('kick-button-pressing');
-    kickPressTimer = setTimeout(() => {
-      kickLongPressFired = true;
-      kickButton.classList.remove('kick-button-pressing');
-      if (confirm(`Remove ${kickButton.dataset.guestName} from the session? They won't be able to rejoin.`)) {
-        socket.emit('guest:kick', { guestId: kickButton.dataset.guestId }, ackToast);
-      }
-    }, KICK_LONG_PRESS_MS);
-  });
-
-  // Releasing early (a normal tap) or dragging off the button both cancel
-  // the pending kick - only a held-down press should ever reach it.
-  const cancelKickPress = (event) => {
-    const kickButton = event.target.closest('.kick-button');
-    kickButton?.classList.remove('kick-button-pressing');
-    clearTimeout(kickPressTimer);
-  };
-  document.addEventListener('pointerup', cancelKickPress);
-  document.addEventListener('pointerleave', cancelKickPress, true);
-  document.addEventListener('pointercancel', cancelKickPress);
-
-  // Phones treat a held-down touch as "show the context menu" by default,
-  // which would pop up over our own long-press action. Suppress it only on
-  // this button.
-  document.addEventListener('contextmenu', (event) => {
-    if (event.target.closest('.kick-button')) event.preventDefault();
-  });
-
   document.addEventListener('click', (event) => {
     const voteButton = event.target.closest('.vote-button');
     if (voteButton) {
@@ -659,20 +698,6 @@ function wireClicks(socket) {
     const modeToggle = event.target.closest('.mode-toggle');
     if (modeToggle) {
       socket.emit('queue:mode', { mode: modeToggle.dataset.mode }, ackToast);
-      return;
-    }
-
-    const kickButton = event.target.closest('.kick-button');
-    if (kickButton) {
-      // The long-press handler above already handled this press and fired
-      // the (harder, banning) kick - don't also run the tap action for the
-      // click event that follows it.
-      if (kickLongPressFired) {
-        kickLongPressFired = false;
-        return;
-      }
-      if (!confirm(`Mark ${kickButton.dataset.guestName} as left? They can rejoin anytime if they come back.`)) return;
-      socket.emit('guest:remove', { guestId: kickButton.dataset.guestId }, ackToast);
       return;
     }
 

@@ -110,8 +110,10 @@ async function pollAndAdvance(session, io, ticks) {
   // Mirrors whatever Spotify reported for the current device. Left
   // untouched when there's no active device this tick (state is null)
   // rather than reset to null, so the volume row doesn't flicker in and
-  // out during a brief no-active-device blip between tracks.
-  if (state) {
+  // out during a brief no-active-device blip between tracks. Guarded the
+  // same way as isPlaying above - most ticks report the same device, so
+  // this avoids a pointless write on every single poll.
+  if (state && state.supportsVolume !== session.supportsVolume) {
     session.supportsVolume = state.supportsVolume;
   }
 

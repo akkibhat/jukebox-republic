@@ -354,18 +354,12 @@ export function registerSocketHandlers(io) {
       const session = requirePermission(socket, ack, 'coHost');
       if (!session) return;
 
-      const target = session.guests.get(guestId);
-      if (!target) return ack?.({ error: 'That guest is not in this session.' });
-      if (guestId === socket.data.guestId) return ack?.({ error: "You can't remove yourself." });
-
-      const sockets = await io.in(roomName(session.id)).fetchSockets();
-      if (sockets.some((s) => s.data.guestId === guestId && s.data.isHost)) {
-        return ack?.({ error: "You can't remove the host." });
-      }
+      const resolved = await resolveRemovalTarget(io, session, socket, guestId, ack, 'remove');
+      if (!resolved) return;
 
       cancelPendingDisconnect(session.id, guestId); // this supersedes any timer already counting down for them
       ack?.({ ok: true });
-      await dropGuest(io, session, target);
+      await dropGuest(io, session, resolved.target);
     });
 
     /**
@@ -382,15 +376,9 @@ export function registerSocketHandlers(io) {
       const session = requirePermission(socket, ack, 'coHost');
       if (!session) return;
 
-      const target = session.guests.get(guestId);
-      if (!target) return ack?.({ error: 'That guest is not in this session.' });
-      if (guestId === socket.data.guestId) return ack?.({ error: "You can't kick yourself." });
-
-      const sockets = await io.in(roomName(session.id)).fetchSockets();
-      const targetSockets = sockets.filter((s) => s.data.guestId === guestId);
-      if (targetSockets.some((s) => s.data.isHost)) {
-        return ack?.({ error: "You can't kick the host." });
-      }
+      const resolved = await resolveRemovalTarget(io, session, socket, guestId, ack, 'kick');
+      if (!resolved) return;
+      const { target, targetSockets } = resolved;
 
       session.bannedGuestIds.add(guestId);
       session.coHostIds.delete(guestId); // a kicked co-host loses their powers too
@@ -482,6 +470,36 @@ export function registerSocketHandlers(io) {
       );
     });
   });
+}
+
+/**
+ * Shared validation for guest:remove and guest:kick, which differ only in
+ * what happens to the target after this point (kick additionally bans and
+ * disconnects; remove doesn't - see each handler's own comment). Looks up
+ * the target, rejects removing yourself or the host, and resolves the
+ * target's live sockets (kick needs them to disconnect; remove ignores
+ * them deliberately). Acks a `verb`-specific error and returns null on
+ * any failure, so callers can `if (!resolved) return;`.
+ */
+async function resolveRemovalTarget(io, session, socket, guestId, ack, verb) {
+  const target = session.guests.get(guestId);
+  if (!target) {
+    ack?.({ error: 'That guest is not in this session.' });
+    return null;
+  }
+  if (guestId === socket.data.guestId) {
+    ack?.({ error: `You can't ${verb} yourself.` });
+    return null;
+  }
+
+  const sockets = await io.in(roomName(session.id)).fetchSockets();
+  const targetSockets = sockets.filter((s) => s.data.guestId === guestId);
+  if (targetSockets.some((s) => s.data.isHost)) {
+    ack?.({ error: `You can't ${verb} the host.` });
+    return null;
+  }
+
+  return { target, targetSockets };
 }
 
 /**

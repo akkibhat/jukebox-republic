@@ -241,9 +241,11 @@ input {
   height: 14px;
 }
 
-.chip-action {
-  width: 22px;
-  height: 22px;
+/* Shared round icon-button look - the guest-chip actions and the larger
+   session-header icon buttons (.button-icon, below) both use it, just at
+   different sizes. */
+.chip-action,
+.button-icon {
   padding: 0;
   border-radius: 50%;
   border: 1px solid var(--border);
@@ -252,6 +254,20 @@ input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.chip-action {
+  width: 22px;
+  height: 22px;
+}
+
+/* Filled state doubles as the co-host status indicator, so a guest who's
+   already a co-host doesn't need a separate static badge next to this
+   button - the button itself shows it. */
+.promote-button-active {
+  background: rgba(201, 162, 75, 0.18);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .kick-button {
@@ -355,14 +371,6 @@ input {
   width: 28px;
   height: 28px;
   flex-shrink: 0;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-dim);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .button-icon .icon {
