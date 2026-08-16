@@ -263,6 +263,36 @@ input {
   display: none;
 }
 
+/* The guest's copy of the join code. Deliberately quieter than the host's
+   big room code - it's a reference for reading aloud, not the headline of
+   the screen. */
+.invite-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.invite-code-label {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.invite-code {
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  margin-left: 4px;
+}
+
+.invite-button {
+  padding: 7px 14px;
+  font-size: 0.8rem;
+}
+
 .end-session-button {
   margin-top: 14px;
   width: 100%;
