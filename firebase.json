@@ -5,6 +5,29 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/auth/**",
+        "run": {
+          "serviceId": "jukebox-republic-server",
+          "region": "australia-southeast1"
+        }
+      },
+      {
+        "source": "/api/**",
+        "run": {
+          "serviceId": "jukebox-republic-server",
+          "region": "australia-southeast1"
+        }
+      },
+      {
+        "source": "/socket.io/**",
+        "run": {
+          "serviceId": "jukebox-republic-server",
+          "region": "australia-southeast1"
+        }
+      }
     ]
   }
 }
