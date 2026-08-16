@@ -1,11 +1,9 @@
 // In-memory state for every active session. A "session" is one host's
 // playback session: one host Spotify account driving playback, a room code
-// guests join with, and the shared queue. No database - sessions are meant
-// to live for the length of a drive or a party, and it's fine for them to
-// vanish when the server
-// restarts. If Jukebox Republic ever needs to survive server restarts or run on
-// multiple instances, this is the module to swap for a Redis-backed one;
-// nothing outside this file knows or cares how sessions are stored.
+// guests join with, and the shared queue. Nothing outside this file knows
+// or cares how sessions are stored - persistence.js mirrors them to
+// Firestore behind that same interface, so this module could be swapped
+// for a different backing store without touching a caller.
 
 import { randomUUID } from 'node:crypto';
 import { deletePersisted } from './persistence.js';
@@ -132,16 +130,28 @@ export function connectedGuests(session) {
   return guests;
 }
 
-/** Wraps a Spotify track as a queue entry, tagged with who added it and their rotation round. */
-export function makeQueueItem({ track, guest, round, duplicateReason = null }) {
+/**
+ * The handful of fields every track-shaped object in this file copies
+ * straight from a raw Spotify track - queue items and both synthetic
+ * now-playing sources all start here, which is what keeps their shape
+ * consistent without three separate field lists to keep in sync.
+ */
+function trackFields(track) {
   return {
-    id: randomUUID(),
     uri: track.uri,
     name: track.name,
     artist: track.artist,
     albumArt: track.albumArt,
     durationMs: track.durationMs,
     explicit: Boolean(track.explicit),
+  };
+}
+
+/** Wraps a Spotify track as a queue entry, tagged with who added it and their rotation round. */
+export function makeQueueItem({ track, guest, round, duplicateReason = null }) {
+  return {
+    id: randomUUID(),
+    ...trackFields(track),
     addedBy: { id: guest.id, name: guest.name },
     addedAt: Date.now(),
     round,
@@ -178,12 +188,7 @@ export function detectDuplicate(session, uri) {
 export function makeFallbackNowPlaying(track) {
   return {
     id: randomUUID(),
-    uri: track.uri,
-    name: track.name,
-    artist: track.artist,
-    albumArt: track.albumArt,
-    durationMs: track.durationMs,
-    explicit: Boolean(track.explicit),
+    ...trackFields(track),
     addedBy: { id: 'fallback', name: 'Autopilot Mix' },
     addedAt: Date.now(),
     round: 0,
@@ -204,12 +209,7 @@ export function makeFallbackNowPlaying(track) {
 export function makeExternalNowPlaying(track) {
   return {
     id: randomUUID(),
-    uri: track.uri,
-    name: track.name,
-    artist: track.artist,
-    albumArt: track.albumArt,
-    durationMs: track.durationMs,
-    explicit: Boolean(track.explicit),
+    ...trackFields(track),
     addedBy: { id: 'external', name: 'Playing on Spotify' },
     addedAt: Date.now(),
     round: 0,
@@ -227,12 +227,7 @@ export function makeExternalNowPlaying(track) {
 export function addToSkippedSongs(session, item) {
   session.skippedSongs.unshift({
     id: item.id,
-    uri: item.uri,
-    name: item.name,
-    artist: item.artist,
-    albumArt: item.albumArt,
-    durationMs: item.durationMs,
-    explicit: item.explicit,
+    ...copyTrackFields(item),
     addedBy: item.addedBy,
   });
 }
@@ -305,22 +300,12 @@ const PLAY_HISTORY_LIMIT = 25;
  * badge and the end-of-session election results are computed from.
  */
 export function addToPlayHistory(session, item, { votedOut = false } = {}) {
-  let downvotes = 0;
-  for (const vote of item.votes?.values() ?? []) {
-    if (vote === 'down') downvotes += 1;
-  }
-
   session.playHistory.unshift({
     id: item.id,
-    uri: item.uri,
-    name: item.name,
-    artist: item.artist,
-    albumArt: item.albumArt,
-    durationMs: item.durationMs,
-    explicit: item.explicit,
+    ...copyTrackFields(item),
     addedBy: item.addedBy,
     netVotes: item.netVotes ?? 0,
-    downvotes,
+    downvotes: countDownvotes(item.votes),
     votedOut, // true only when the group's majority vote removed it - a host skip or natural finish isn't a rejection
     playedAt: Date.now(),
   });
@@ -339,25 +324,36 @@ export function addToPlayHistory(session, item, { votedOut = false } = {}) {
 export function serializeItem(item, forGuestId, { threshold } = {}) {
   if (!item) return null;
 
-  let downvotes = 0;
-  for (const vote of item.votes.values()) {
-    if (vote === 'down') downvotes += 1;
-  }
-
   return {
     id: item.id,
+    ...copyTrackFields(item),
+    addedBy: item.addedBy,
+    round: item.round,
+    netVotes: item.netVotes,
+    downvotes: countDownvotes(item.votes),
+    threshold: threshold ?? null,
+    myVote: forGuestId ? item.votes.get(forGuestId) || null : null,
+    duplicateReason: item.duplicateReason ?? null,
+  };
+}
+
+/** Same field set as trackFields, but copying from an already-normalized item rather than a raw Spotify track. */
+function copyTrackFields(item) {
+  return {
     uri: item.uri,
     name: item.name,
     artist: item.artist,
     albumArt: item.albumArt,
     durationMs: item.durationMs,
     explicit: item.explicit,
-    addedBy: item.addedBy,
-    round: item.round,
-    netVotes: item.netVotes,
-    downvotes,
-    threshold: threshold ?? null,
-    myVote: forGuestId ? item.votes.get(forGuestId) || null : null,
-    duplicateReason: item.duplicateReason ?? null,
   };
+}
+
+/** How many of a track's votes are downvotes - shared by history entries and the wire-format serializer. */
+function countDownvotes(votes) {
+  let downvotes = 0;
+  for (const vote of votes?.values() ?? []) {
+    if (vote === 'down') downvotes += 1;
+  }
+  return downvotes;
 }

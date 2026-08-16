@@ -673,7 +673,6 @@ function wireClicks(socket) {
 }
 
 /** Bottom tab nav: swaps which .tab-panel is visible and highlights the active button. Pure UI state, no server round-trip. */
-/** Bottom tab nav: swaps which .tab-panel is visible. Pure UI state, no server round-trip. */
 function wireTabs() {
   const tabBar = document.getElementById('tab-bar');
   if (!tabBar) return;

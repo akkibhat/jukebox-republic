@@ -151,34 +151,13 @@ export function registerSocketHandlers(io) {
     socket.on('playback:pause', async (_payload, ack) => {
       const session = requireHostPowers(socket, ack);
       if (!session) return;
-      try {
-        const accessToken = await ensureFreshToken(session);
-        await pausePlayback(accessToken);
-        // Set optimistically rather than waiting for the next poll tick
-        // (up to 4s away) to pick it up - the command already succeeded,
-        // so there's no reason the button state should lag behind it.
-        session.isPlaying = false;
-        ack?.({ ok: true });
-        await broadcastState(io, session);
-      } catch (err) {
-        console.error('[sockets] playback:pause failed:', err.message);
-        ack?.({ error: 'Could not pause. Is Spotify open on the host phone?' });
-      }
+      await runPlaybackCommand(session, io, ack, { verb: 'pause', call: pausePlayback, isPlayingAfter: false });
     });
 
     socket.on('playback:resume', async (_payload, ack) => {
       const session = requireHostPowers(socket, ack);
       if (!session) return;
-      try {
-        const accessToken = await ensureFreshToken(session);
-        await resumePlayback(accessToken);
-        session.isPlaying = true;
-        ack?.({ ok: true });
-        await broadcastState(io, session);
-      } catch (err) {
-        console.error('[sockets] playback:resume failed:', err.message);
-        ack?.({ error: 'Could not resume. Is Spotify open on the host phone?' });
-      }
+      await runPlaybackCommand(session, io, ack, { verb: 'resume', call: resumePlayback, isPlayingAfter: true });
     });
 
     // The "law of the land" switch: how the queue orders itself. Host-only
@@ -361,6 +340,26 @@ export function registerSocketHandlers(io) {
       await broadcastState(io, session);
     });
   });
+}
+
+/**
+ * Shared body for the pause/resume handlers above, which differ only in
+ * which Spotify call they make and which way isPlaying ends up.
+ */
+async function runPlaybackCommand(session, io, ack, { verb, call, isPlayingAfter }) {
+  try {
+    const accessToken = await ensureFreshToken(session);
+    await call(accessToken);
+    // Set optimistically rather than waiting for the next poll tick (up to
+    // 4s away) to pick it up - the command already succeeded, so there's
+    // no reason the button state should lag behind it.
+    session.isPlaying = isPlayingAfter;
+    ack?.({ ok: true });
+    await broadcastState(io, session);
+  } catch (err) {
+    console.error(`[sockets] playback:${verb} failed:`, err.message);
+    ack?.({ error: `Could not ${verb}. Is Spotify open on the host phone?` });
+  }
 }
 
 /** Looks up the caller's session and confirms they're the true host, acking an error and returning null if not. For powers a co-host shares, use requireHostPowers instead. */
