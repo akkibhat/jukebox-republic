@@ -3,6 +3,7 @@
 // all - they join with a room code instead (see routes/api.js).
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
+import QRCode from 'qrcode';
 import { buildAuthorizeUrl, exchangeCodeForTokens } from '../spotifyAuth.js';
 import { getCurrentUserProfile } from '../spotifyApi.js';
 import { createSession, addToFallbackTracks } from '../sessionStore.js';
@@ -42,6 +43,11 @@ authRouter.get('/callback', async (req, res) => {
       hostDisplayName: profile.displayName,
       tokens,
     });
+
+    // Rendered once here rather than on every "here's how to join" fetch -
+    // session.joinUrl is fixed for the session's whole life, so the PNG
+    // would come out identical every time anyway.
+    session.qrCodeDataUrl = await QRCode.toDataURL(session.joinUrl);
 
     // Seeded once, right at session start, rather than on-demand the first
     // time the queue runs dry - that would add a delay right when everyone

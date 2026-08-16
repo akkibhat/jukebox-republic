@@ -7,6 +7,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { deletePersisted } from './persistence.js';
+import { config } from './config.js';
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I - easy to read aloud
 
@@ -33,6 +34,12 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
   const session = {
     id,
     roomCode,
+    // Fixed for the session's whole life (just roomCode + the configured
+    // base URL) - computed once here rather than rebuilt on every
+    // GET /api/sessions/:id, which used to also regenerate the QR code PNG
+    // (see routes/auth.js for that part) from this same deterministic
+    // string on every single request.
+    joinUrl: `${config.publicBaseUrl}/guest.html?code=${roomCode}`,
     createdAt: Date.now(),
     host: { spotifyId: hostSpotifyId, displayName: hostDisplayName },
     tokens, // { accessToken, refreshToken, expiresAt } - see spotifyAuth.js

@@ -4,27 +4,25 @@
 // and adding to the queue happen over sockets.js instead, since those need
 // to push updates to everyone else in the car.
 import { Router } from 'express';
-import QRCode from 'qrcode';
 import { getSession, getSessionByRoomCode, connectedGuestCount } from '../sessionStore.js';
 import { ensureFreshToken } from '../spotifyAuth.js';
 import { searchTracks, searchPlaylists } from '../spotifyApi.js';
-import { config } from '../config.js';
 
 export const apiRouter = Router();
 
-apiRouter.get('/sessions/:id', async (req, res) => {
+apiRouter.get('/sessions/:id', (req, res) => {
   const session = getSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found.' });
 
-  const joinUrl = `${config.publicBaseUrl}/guest.html?code=${session.roomCode}`;
-  const qrCodeDataUrl = await QRCode.toDataURL(joinUrl);
-
+  // joinUrl and qrCodeDataUrl are computed once at login (routes/auth.js) -
+  // both are fixed for the session's whole life, so there's nothing to
+  // redo here even though the host may hit this endpoint more than once.
   res.json({
     sessionId: session.id,
     roomCode: session.roomCode,
     hostDisplayName: session.host.displayName,
-    joinUrl,
-    qrCodeDataUrl,
+    joinUrl: session.joinUrl,
+    qrCodeDataUrl: session.qrCodeDataUrl,
     connectedGuestCount: connectedGuestCount(session),
   });
 });
