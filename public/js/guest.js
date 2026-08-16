@@ -1,4 +1,5 @@
-import { startQueueApp, showToast } from './queueApp.js';
+import { startQueueApp, showToast, escapeHtml } from './queueApp.js';
+import { fetchJson } from './api.js';
 
 const codeFromUrl = new URLSearchParams(window.location.search).get('code');
 
@@ -27,11 +28,7 @@ function showCodeForm() {
 
 /** Resolves a code to a session and starts the shared queue UI, or re-prompts if it's wrong. */
 function joinByCode(code) {
-  fetch(`/api/sessions/by-code/${encodeURIComponent(code)}`)
-    .then((res) => {
-      if (!res.ok) throw new Error('not found');
-      return res.json();
-    })
+  fetchJson(`/api/sessions/by-code/${encodeURIComponent(code)}`)
     .then((info) => {
       // Guests get the code too, not just the host: whoever's already in
       // is usually the one reading it out to the rest of the car, and
@@ -90,11 +87,4 @@ function wireInvite(roomCode) {
       showToast(joinUrl);
     }
   });
-}
-
-/** Escapes text before it goes into innerHTML - guest-chosen names reach the DOM this way. */
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str ?? '';
-  return div.innerHTML;
 }

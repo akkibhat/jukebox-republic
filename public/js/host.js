@@ -1,4 +1,5 @@
-import { startQueueApp, showToast } from './queueApp.js';
+import { startQueueApp, ackToast } from './queueApp.js';
+import { fetchJson } from './api.js';
 
 const sessionId = new URLSearchParams(window.location.search).get('session');
 
@@ -6,11 +7,7 @@ if (!sessionId) {
   document.getElementById('session-header').innerHTML =
     '<p>No session found. <a href="/auth/login">Start one</a>.</p>';
 } else {
-  fetch(`/api/sessions/${sessionId}`)
-    .then((res) => {
-      if (!res.ok) throw new Error('not found');
-      return res.json();
-    })
+  fetchJson(`/api/sessions/${sessionId}`)
     .then((info) => {
       document.getElementById('session-header').innerHTML = `
         <div class="guest-count" id="guest-count">${info.connectedGuestCount} connected</div>
@@ -39,9 +36,7 @@ if (!sessionId) {
       // under your thumb. 'change' fires on release, so dragging around
       // doesn't spam Spotify with a call per pixel.
       document.getElementById('volume-slider').addEventListener('change', (event) => {
-        socket.emit('playback:volume', { percent: Number(event.target.value) }, (response) => {
-          if (response?.error) showToast(response.error);
-        });
+        socket.emit('playback:volume', { percent: Number(event.target.value) }, ackToast);
       });
     })
     .catch(() => {

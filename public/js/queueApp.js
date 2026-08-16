@@ -71,6 +71,7 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
         socket.io.on('reconnect_attempt', () => setConnectionBanner('Offline - reconnecting…'));
 
         socket.on('state', renderState);
+        socket.on('progress', updateProgress);
         socket.on('session:ended', renderSessionEnded);
         socket.on('kicked', () => renderFatalError('The host removed you from this session.'));
 
@@ -136,6 +137,16 @@ function setConnectionBanner(message) {
   if (progressAnchor) progressAnchor.playing = false;
 }
 
+/**
+ * Handles the lightweight 'progress' event (see broadcastProgress
+ * server-side) - just re-anchors the interpolation timer's starting
+ * point without repainting anything, since nothing else changed.
+ */
+function updateProgress({ progressMs, isPlaying }) {
+  if (!progressAnchor) return; // no track context yet - a full 'state' event establishes that first
+  progressAnchor = { ...progressAnchor, baseMs: progressMs, anchoredAt: Date.now(), playing: isPlaying === true };
+}
+
 /** Entry point for every server update - repaints the whole UI from one state payload. */
 function renderState(state) {
   havePowers = Boolean(state.youHavePowers);
@@ -164,7 +175,7 @@ function renderState(state) {
   renderReaddableList('autopilot-list', state.fallbackTracks, 'Add to queue', 'Nothing in the Autopilot Mix right now.');
   renderReaddableList('skipped-list', state.skippedSongs, 'Re-add', 'Nothing skipped yet.');
   renderReaddableList('history-list', state.playHistory, 'Re-add', 'Nothing played yet.', {
-    golden: findGoldenRecord(state.playHistory),
+    goldenId: state.goldenRecordId,
   });
 }
 
@@ -194,23 +205,6 @@ function renderGuestChips(guests) {
       return `<span class="guest-chip">${escapeHtml(guest.name)}${isMe ? ' (you)' : ''}${badge}${promote}${kick}</span>`;
     })
     .join('');
-}
-
-/**
- * The current holder of the "golden record" - the session's most net-
- * upvoted played song so far. History arrives newest-first and ties go to
- * whichever played first, so a later array entry (an older play) takes an
- * equal score - hence >=. Nothing qualifies until something actually goes
- * net-positive; a badge for "least disliked at zero" would be no honor.
- */
-function findGoldenRecord(history) {
-  let golden = null;
-  for (const entry of history || []) {
-    if (entry.netVotes > 0 && entry.netVotes >= (golden?.netVotes ?? 0)) {
-      golden = entry;
-    }
-  }
-  return golden;
 }
 
 /** The now-playing card: art, votes, progress, and host controls for whoever holds powers. */
@@ -355,7 +349,7 @@ function renderQueue(queue, hasAutopilot) {
  * in place of the rows instead of disappearing - the tab itself is always
  * reachable from the tab bar regardless of what's in it.
  */
-function renderReaddableList(listId, tracks, buttonLabel, emptyMessage, { golden = null } = {}) {
+function renderReaddableList(listId, tracks, buttonLabel, emptyMessage, { goldenId = null } = {}) {
   const list = document.getElementById(listId);
   if (!list) return;
 
@@ -368,14 +362,14 @@ function renderReaddableList(listId, tracks, buttonLabel, emptyMessage, { golden
 
   list.innerHTML = readdCaches[listId]
     .map(
-      // `golden` is compared by identity, not id - the same song re-added
-      // and re-played gets its own separate history entry, and only the
-      // specific play that earned the votes should wear the medal.
+      // Matched by id, not object identity - the same song re-added and
+      // re-played gets its own separate history entry (a fresh id), and
+      // only the specific play that earned the votes should wear the medal.
       (track, index) => `
         <div class="queue-item skipped-item">
           <div class="art" style="background-image: url('${track.albumArt || ''}')"></div>
           <div class="track-info">
-            <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}${track === golden ? goldenBadgeHtml(track) : ''}</div>
+            <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}${track.id === goldenId ? goldenBadgeHtml(track) : ''}</div>
             <div class="track-artist">${escapeHtml(track.artist)}</div>
           </div>
           <button class="button button-secondary readd-button" data-list="${listId}" data-index="${index}">${buttonLabel}</button>
@@ -598,17 +592,13 @@ function wireClicks(socket) {
       const itemId = voteButton.closest('[data-item-id]')?.dataset.itemId;
       const direction = voteButton.dataset.vote;
       if (!itemId || !direction) return;
-      socket.emit('queue:vote', { itemId, direction }, (response) => {
-        if (response?.error) showToast(response.error);
-      });
+      socket.emit('queue:vote', { itemId, direction }, ackToast);
       return;
     }
 
     const hostButton = event.target.closest('.host-action');
     if (hostButton) {
-      socket.emit(`playback:${hostButton.dataset.action}`, {}, (response) => {
-        if (response?.error) showToast(response.error);
-      });
+      socket.emit(`playback:${hostButton.dataset.action}`, {}, ackToast);
       return;
     }
 
@@ -616,18 +606,14 @@ function wireClicks(socket) {
     // click handler doesn't need to know what's currently active.
     const modeToggle = event.target.closest('.mode-toggle');
     if (modeToggle) {
-      socket.emit('queue:mode', { mode: modeToggle.dataset.mode }, (response) => {
-        if (response?.error) showToast(response.error);
-      });
+      socket.emit('queue:mode', { mode: modeToggle.dataset.mode }, ackToast);
       return;
     }
 
     const kickButton = event.target.closest('.kick-button');
     if (kickButton) {
       if (!confirm(`Remove ${kickButton.dataset.guestName} from the session? They won't be able to rejoin.`)) return;
-      socket.emit('guest:kick', { guestId: kickButton.dataset.guestId }, (response) => {
-        if (response?.error) showToast(response.error);
-      });
+      socket.emit('guest:kick', { guestId: kickButton.dataset.guestId }, ackToast);
       return;
     }
 
@@ -638,9 +624,7 @@ function wireClicks(socket) {
       socket.emit(
         'cohost:set',
         { guestId: promoteButton.dataset.guestId, promote: promoteButton.dataset.promote === 'true' },
-        (response) => {
-          if (response?.error) showToast(response.error);
-        }
+        ackToast
       );
       return;
     }
@@ -652,9 +636,7 @@ function wireClicks(socket) {
       // Re-adding is just adding again - same event, same duplicate check,
       // same fair-rotation round assignment, just sourced from a read-only
       // list instead of a fresh search.
-      socket.emit('queue:add', { track }, (response) => {
-        if (response?.error) showToast(response.error);
-      });
+      socket.emit('queue:add', { track }, ackToast);
       return;
     }
 
@@ -665,9 +647,7 @@ function wireClicks(socket) {
     if (removeButton) {
       const itemId = removeButton.closest('[data-item-id]')?.dataset.itemId;
       if (!itemId) return;
-      socket.emit('queue:remove', { itemId }, (response) => {
-        if (response?.error) showToast(response.error);
-      });
+      socket.emit('queue:remove', { itemId }, ackToast);
     }
   });
 }
@@ -697,16 +677,30 @@ function wireSearch(sessionId, socket) {
   const results = document.getElementById('search-results');
   if (!input || !results) return;
 
-  let debounceHandle;
+  wireDebouncedInput(input, results, SEARCH_DEBOUNCE_MS, (query) => runSearch(sessionId, query, results, socket));
+}
 
+/**
+ * Wires an "as you type" input to a debounced query function, clearing
+ * the results element - and any pending call - the moment the box goes
+ * empty (the shared shape both the song search and playlist search boxes
+ * used to hand-roll separately). `onImmediate`, if given, runs
+ * synchronously on every non-empty keystroke before the debounce timer
+ * starts; the playlist box uses it to short-circuit a pasted link
+ * straight to a result, skipping the debounce and the network round-trip
+ * entirely when it returns true.
+ */
+function wireDebouncedInput(input, resultsEl, ms, onQuery, onImmediate) {
+  let handle;
   input.addEventListener('input', () => {
-    clearTimeout(debounceHandle);
+    clearTimeout(handle);
     const query = input.value.trim();
     if (!query) {
-      results.innerHTML = '';
+      resultsEl.innerHTML = '';
       return;
     }
-    debounceHandle = setTimeout(() => runSearch(sessionId, query, results, socket), SEARCH_DEBOUNCE_MS);
+    if (onImmediate && onImmediate(query)) return;
+    handle = setTimeout(() => onQuery(query), ms);
   });
 }
 
@@ -734,9 +728,7 @@ async function runSearch(sessionId, query, resultsEl, socket) {
   resultsEl.querySelectorAll('.add-button').forEach((button) => {
     button.addEventListener('click', () => {
       const track = data.results[Number(button.dataset.index)];
-      socket.emit('queue:add', { track }, (response) => {
-        if (response?.error) showToast(response.error);
-      });
+      socket.emit('queue:add', { track }, ackToast);
       resultsEl.innerHTML = '';
       document.getElementById('search-input').value = '';
     });
@@ -757,24 +749,18 @@ function wirePlaylistSearch(sessionId, socket) {
   const results = document.getElementById('playlist-results');
   if (!input || !results) return;
 
-  let debounceHandle;
-
-  input.addEventListener('input', () => {
-    clearTimeout(debounceHandle);
-    const query = input.value.trim();
-    if (!query) {
-      results.innerHTML = '';
-      return;
-    }
-
-    const linkMatch = query.match(/playlist[/:]([A-Za-z0-9]{10,})/);
-    if (linkMatch) {
+  wireDebouncedInput(
+    input,
+    results,
+    SEARCH_DEBOUNCE_MS,
+    (query) => runPlaylistSearch(sessionId, query, results, input, socket),
+    (query) => {
+      const linkMatch = query.match(/playlist[/:]([A-Za-z0-9]{10,})/);
+      if (!linkMatch) return false;
       renderPlaylistResults(results, input, [{ id: linkMatch[1], name: 'Playlist from your link', owner: 'tap + to add it', trackCount: null, image: null }], socket);
-      return;
+      return true;
     }
-
-    debounceHandle = setTimeout(() => runPlaylistSearch(sessionId, query, results, input, socket), SEARCH_DEBOUNCE_MS);
-  });
+  );
 }
 
 /** Searches Spotify's playlists for the host's Autopilot Mix box. */
@@ -829,6 +815,16 @@ function renderPlaylistResults(resultsEl, inputEl, playlists, socket) {
 
 // --- Small helpers ---------------------------------------------------------
 
+/**
+ * The shape every simple emit-with-ack call site in this app shares:
+ * do nothing on success, toast the message on failure. Pass directly as
+ * a socket.emit ack callback. Exported so host.js can reuse it for its
+ * own controls (the volume slider).
+ */
+export function ackToast(response) {
+  if (response?.error) showToast(response.error);
+}
+
 let toastTimer;
 /** Brief, non-blocking error message (duplicate song, self-downvote, host-only action, etc). Exported so host.js can reuse it for its own controls. */
 export function showToast(message) {
@@ -845,8 +841,8 @@ export function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove('visible'), 2500);
 }
 
-/** Escapes text before it goes into innerHTML - track and guest names reach the DOM this way. */
-function escapeHtml(str) {
+/** Escapes text before it goes into innerHTML - track and guest names reach the DOM this way. Exported since guest.js needs it too. */
+export function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str ?? '';
   return div.innerHTML;
