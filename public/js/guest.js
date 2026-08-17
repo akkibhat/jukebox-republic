@@ -36,6 +36,7 @@ function joinByCode(code) {
       document.getElementById('session-header').innerHTML = `
         <div class="guest-count" id="guest-count">joining&hellip;</div>
         <div class="guest-names" id="guest-names"></div>
+        <div class="banned-guests" id="banned-guests"></div>
         <p>Riding with <strong>${escapeHtml(info.hostDisplayName)}</strong></p>
         <div class="invite-row">
           <span class="invite-code-label">Code <b class="invite-code">${escapeHtml(info.roomCode)}</b></span>

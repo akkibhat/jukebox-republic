@@ -188,6 +188,7 @@ function renderState(state) {
     guestCountEl.textContent = `${state.connectedGuestCount} connected`;
   }
   renderGuestChips(state.guests || []);
+  renderBannedGuests(state.bannedGuests || []);
   renderVolumeControls(state);
 
   // Re-anchor the progress bar to the server's number the moment it
@@ -241,6 +242,37 @@ function renderGuestChips(guests) {
       return `<span class="guest-chip">${escapeHtml(guest.name)}${isMe ? ' (you)' : ''}${badge}${promote}${kick}</span>`;
     })
     .join('');
+}
+
+/**
+ * Whoever got kicked, with a one-tap way to undo it - the only previous
+ * recovery path was the banned guest themselves knowing to clear their
+ * browser storage for a fresh id. Same visibility rule as the kick button
+ * itself (havePowers, not isHostView, so a promoted co-host on guest.html
+ * sees this too); hidden entirely when there's nothing banned or the
+ * viewer has no powers, rather than showing an empty section.
+ */
+function renderBannedGuests(bannedGuests) {
+  const el = document.getElementById('banned-guests');
+  if (!el) return;
+
+  if (!havePowers || bannedGuests.length === 0) {
+    el.innerHTML = '';
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="banned-guests-label">Banned</div>
+    ${bannedGuests
+      .map(
+        (guest) => `
+          <span class="guest-chip banned-chip">
+            ${escapeHtml(guest.name)}
+            <button class="chip-action unban-button" data-guest-id="${guest.id}" title="Unban">${iconHtml('x')}</button>
+          </span>`
+      )
+      .join('')}
+  `;
 }
 
 /**
@@ -747,6 +779,12 @@ function wireClicks(socket) {
         { guestId: promoteButton.dataset.guestId, promote: promoteButton.dataset.promote === 'true' },
         ackToast
       );
+      return;
+    }
+
+    const unbanButton = event.target.closest('.unban-button');
+    if (unbanButton) {
+      socket.emit('guest:unban', { guestId: unbanButton.dataset.guestId }, ackToast);
       return;
     }
 

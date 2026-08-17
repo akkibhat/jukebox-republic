@@ -439,6 +439,23 @@ export function registerSocketHandlers(io) {
     });
 
     /**
+     * Reverses a kick - same permission tier as guest:kick itself
+     * (whoever can ban someone can also undo it). The banned guest's name
+     * survives in session.guests (dropGuest never deletes the entry, just
+     * marks them disconnected), which is what lets the banned-guests list
+     * show a name instead of a bare id.
+     */
+    socket.on('guest:unban', async ({ guestId }, ack) => {
+      const session = requirePermission(socket, ack, 'coHost');
+      if (!session) return;
+      if (!session.bannedGuestIds.has(guestId)) return ack?.({ error: 'That guest is not banned.' });
+
+      session.bannedGuestIds.delete(guestId);
+      ack?.({ ok: true });
+      await broadcastState(io, session);
+    });
+
+    /**
      * Promote or demote a co-host. True-host-only (not co-hosts - powers
      * that can mint more powers stay with the person whose Spotify account
      * is on the line). Playback keeps running on the host's account either

@@ -96,6 +96,7 @@ if (!sessionId) {
       document.getElementById('session-header').innerHTML = `
         <div class="guest-count" id="guest-count">${info.connectedGuestCount} connected</div>
         <div class="guest-names" id="guest-names"></div>
+        <div class="banned-guests" id="banned-guests"></div>
         <div class="room-code">${info.roomCode}</div>
         <div class="invite-row">
           <button class="button button-secondary invite-button" id="invite-button" type="button">Share invite link</button>

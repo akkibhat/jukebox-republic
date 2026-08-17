@@ -36,6 +36,14 @@ export async function broadcastState(io, session) {
     fallbackTracks: session.fallbackTracks,
     connectedGuestCount: guests.length,
     guests,
+    // Sent to everyone (cheap - a handful of entries at most) but only
+    // rendered client-side for whoever holds host/co-host powers, same
+    // pattern as the kick/promote buttons above - the server is the real
+    // gate on the unban action itself regardless of what's shown.
+    bannedGuests: [...session.bannedGuestIds].map((id) => ({
+      id,
+      name: session.guests.get(id)?.name || 'Unknown guest',
+    })),
     playbackBlockedReason: session.playbackBlockedReason,
     isPlaying: session.isPlaying,
     progressMs: session.progressMs,
