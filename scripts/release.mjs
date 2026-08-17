@@ -1,8 +1,8 @@
 // One-shot release script: bumps package.json's version, stamps it into
 // public/*.html (see stamp-version.mjs), commits, pushes, tags, and creates
-// a GitHub Release with auto-generated notes summarizing every commit since
-// the last tag. Run manually - `node scripts/release.mjs patch|minor|major`
-// (or an explicit `node scripts/release.mjs 1.2.0`).
+// a GitHub Release listing every commit since the last tag. Run manually -
+// `node scripts/release.mjs patch|minor|major` (or an explicit
+// `node scripts/release.mjs 1.2.0`).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -29,6 +29,20 @@ const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
 const nextVersion = bump(pkg.version, arg);
 console.log(`${pkg.version} -> ${nextVersion}`);
 
+// Captured before any commits happen below, so it's genuinely "the tag
+// before this release" rather than something that could shift underneath
+// us. `gh release create --generate-notes` looks empty-handed on this repo
+// - it builds its "What's Changed" list from merged PRs, and everything
+// here is a direct commit to main - so the release body is built by hand
+// from the real commit log instead.
+let previousTag = null;
+try {
+  previousTag = execFileSync('git', ['describe', '--tags', '--abbrev=0'], { cwd: rootDir }).toString().trim();
+} catch {
+  // No prior tag - this is the first release, so the range below covers
+  // the whole history up to HEAD.
+}
+
 pkg.version = nextVersion;
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 
@@ -43,6 +57,12 @@ run('git', ['commit', '-m', `Release v${nextVersion}`]);
 run('git', ['push']);
 run('git', ['tag', '-a', `v${nextVersion}`, '-m', `v${nextVersion}`]);
 run('git', ['push', 'origin', `v${nextVersion}`]);
-run('gh', ['release', 'create', `v${nextVersion}`, '--title', `v${nextVersion}`, '--generate-notes']);
+
+const range = previousTag ? `${previousTag}..HEAD` : 'HEAD';
+const commitList = execFileSync('git', ['log', '--reverse', '--format=- `%h` %s', range], { cwd: rootDir })
+  .toString()
+  .trim();
+const notes = `## What changed\n\n${commitList}\n`;
+run('gh', ['release', 'create', `v${nextVersion}`, '--title', `v${nextVersion}`, '--notes', notes]);
 
 console.log(`\nReleased v${nextVersion}.`);
