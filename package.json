@@ -6,7 +6,8 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch server/index.js"
+    "dev": "node --watch server/index.js",
+    "test": "node --test server/queueFairness.test.js server/goldenRecord.test.js server/sessionStore.test.js"
   },
   "author": "Akki Bhat",
   "license": "PolyForm-Noncommercial-1.0.0",
