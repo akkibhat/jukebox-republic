@@ -46,6 +46,7 @@ function joinByCode(code) {
       // Built from the current origin rather than the server's configured
       // base URL: this page loaded from that origin, so it's known to
       // work for whoever's standing next to you.
+      document.getElementById('ticker-room').textContent = `Room ${info.roomCode}`;
       const joinUrl = `${window.location.origin}/guest.html?code=${encodeURIComponent(info.roomCode)}`;
       wireInviteButton(document.getElementById('invite-button'), joinUrl, info.roomCode);
       startQueueApp(info.sessionId);

@@ -307,15 +307,60 @@ function renderNowPlaying(track, playbackBlockedReason, isPlaying, progressMs) {
       <div class="now-playing">
         <div class="art" style="background-image: url('${track.albumArt || ''}')"></div>
         <div class="track-info">
-          <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}</div>
+          <div class="track-name now-playing-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}</div>
           <div class="track-artist">${escapeHtml(track.artist)}</div>
           <div class="added-by">${addedByLineHtml(track)}</div>
-          ${skipProgressHtml(track)}
         </div>
-        ${voteButtonsHtml(track)}
       </div>
       ${progressBarHtml(track, progressMs)}
+      ${bigVoteButtonsHtml(track)}
       ${havePowers ? hostControlsHtml(isPlaying) : ''}
+    </div>
+  `;
+}
+
+/**
+ * The now-playing card's two wide vote buttons. Each one carries its own
+ * count, so "3 up" and "1 of 2 to skip" are read and tapped in the same
+ * place. The threshold is null only before the first broadcast with
+ * guests in it, so the skip side just shows the down count until then.
+ */
+function bigVoteButtonsHtml(track) {
+  const { up, down } = voteCounts(track);
+  const skipText = track.threshold ? `${down} of ${track.threshold} to skip` : `${down} down`;
+  return `
+    <div class="big-votes">
+      <button class="vote-button big-vote ${track.myVote === 'up' ? 'active-up' : ''}" data-vote="up" aria-label="Vote up, ${up} so far">
+        ${iconHtml('vote-up', 'icon vote-icon')}<span>${up} up</span>
+      </button>
+      <button class="vote-button big-vote ${track.myVote === 'down' ? 'active-down' : ''}" data-vote="down" aria-label="Vote down, ${skipText}">
+        ${iconHtml('vote-down', 'icon vote-icon')}<span>${skipText}</span>
+      </button>
+    </div>
+  `;
+}
+
+/** Splits a track's net score back into its up and down counts (net = up - down). */
+function voteCounts(track) {
+  const down = track.downvotes || 0;
+  return { up: (track.netVotes || 0) + down, down };
+}
+
+/**
+ * The thin bar under a queued song: green for up votes, red for down,
+ * and the grey remainder is how far the downs still are from a skip. A
+ * song nobody has voted on shows an all-grey bar, which keeps every row
+ * the same height.
+ */
+function tallyBarHtml(track) {
+  const { up, down } = voteCounts(track);
+  const total = Math.max(up + down, track.threshold || 1);
+  const rest = total - up - down;
+  return `
+    <div class="tally" aria-hidden="true">
+      ${up ? `<i class="tally-up" style="flex: ${up}"></i>` : ''}
+      ${down ? `<i class="tally-down" style="flex: ${down}"></i>` : ''}
+      ${rest ? `<i class="tally-rest" style="flex: ${rest}"></i>` : ''}
     </div>
   `;
 }
@@ -330,8 +375,11 @@ function progressBarHtml(track, progressMs) {
   if (typeof progressMs !== 'number' || !track.durationMs) return '';
   const pct = Math.min(100, (progressMs / track.durationMs) * 100);
   return `
-    <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width: ${pct}%"></div></div>
-    <div class="progress-times"><span id="progress-elapsed">${fmtTime(progressMs)}</span><span>${fmtTime(track.durationMs)}</span></div>
+    <div class="progress-row">
+      <span id="progress-elapsed">${fmtTime(progressMs)}</span>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width: ${pct}%"></div></div>
+      <span>${fmtTime(track.durationMs)}</span>
+    </div>
   `;
 }
 
@@ -401,17 +449,17 @@ function renderQueue(queue, hasAutopilot) {
             // something you have to infer from the ordering.
             (track, index) => `
               <div class="queue-item ${index === 0 ? 'up-next' : ''}" data-item-id="${track.id}">
+                <div class="queue-rank">${index + 1}</div>
                 <div class="art" style="background-image: url('${track.albumArt || ''}')"></div>
                 <div class="track-info">
-                  ${index === 0 ? '<div class="up-next-label">Up next</div>' : ''}
                   <div class="track-name">${escapeHtml(track.name)}${explicitBadgeHtml(track)}</div>
-                  <div class="track-artist">${escapeHtml(track.artist)}</div>
-                  <div class="added-by">${escapeHtml(track.addedBy.name)}</div>
+                  <div class="track-artist">${escapeHtml(track.artist)} &middot; ${escapeHtml(track.addedBy.name)}</div>
+                  ${tallyBarHtml(track)}
                   ${skipProgressHtml(track)}
                   ${duplicateBadgeHtml(track)}
                 </div>
                 ${voteButtonsHtml(track)}
-                ${track.addedBy.id === myGuestId || track.duplicateReason ? removeButtonHtml() : ''}
+                ${track.addedBy.id === myGuestId || track.duplicateReason ? removeButtonHtml() : '<span class="remove-spacer"></span>'}
               </div>
             `
           )
@@ -479,7 +527,7 @@ function voteButtonsHtml(track) {
   return `
     <div class="vote-buttons">
       <button class="vote-button ${upClass}" data-vote="up" aria-label="Vote up">${iconHtml('vote-up', 'icon vote-icon')}</button>
-      <span class="net-votes">${track.netVotes}</span>
+      <span class="net-votes${track.netVotes < 0 ? ' net-votes-negative' : ''}">${track.netVotes > 0 ? '+' : ''}${track.netVotes}</span>
       <button class="vote-button ${downClass}" data-vote="down" aria-label="Vote down">${iconHtml('vote-down', 'icon vote-icon')}</button>
     </div>
   `;
@@ -490,10 +538,11 @@ function removeButtonHtml() {
   return `<button class="remove-button" title="Remove your song" aria-label="Remove">${iconHtml('x')}</button>`;
 }
 
-/** "2 of 3 to skip" - only shown once a track has at least one downvote, so a clean track shows nothing extra. */
+/** "1 more down vote skips it" - only shown once a track has a down vote, so a clean track shows nothing extra. */
 function skipProgressHtml(track) {
   if (!track.downvotes) return '';
-  return `<div class="skip-progress">${track.downvotes} of ${track.threshold} downvotes to skip</div>`;
+  const left = Math.max(1, (track.threshold || 0) - track.downvotes);
+  return `<div class="skip-progress">${left} more down vote${left === 1 ? '' : 's'} skips it</div>`;
 }
 
 /**

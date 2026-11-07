@@ -140,6 +140,7 @@ if (!sessionId) {
         <div class="device-list" id="device-list" style="display: none;"></div>
         <button class="button button-secondary end-session-button" id="end-session-button" type="button">Stop spinning</button>
       `;
+      document.getElementById('ticker-room').textContent = `Room ${info.roomCode}`;
       embedLogoInQrCode();
       wireInviteButton(document.getElementById('invite-button'), info.joinUrl, info.roomCode);
       if (!hostToken) {

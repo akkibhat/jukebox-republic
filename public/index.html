@@ -7,42 +7,53 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/favicon.svg" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <meta name="theme-color" content="#16130f" />
+  <meta name="theme-color" content="#0f1114" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/style.css?v=0.3.0" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css?v=0.4.0" />
 </head>
 <body>
-  <main class="screen screen-center">
-    <button class="button-icon info-button" id="info-button" type="button" title="How this works">
-      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg>
-    </button>
+  <header class="ticker">
+    <span class="ticker-brand">
+      <svg class="ticker-mark" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="7"/>
+        <rect x="18" y="39" width="8" height="22" rx="2" fill="currentColor"/>
+        <rect x="32" y="31" width="8" height="38" rx="2" fill="currentColor"/>
+        <rect x="46" y="23" width="8" height="54" rx="2" fill="currentColor"/>
+        <rect x="60" y="31" width="8" height="38" rx="2" fill="currentColor"/>
+        <rect x="74" y="39" width="8" height="22" rx="2" fill="currentColor"/>
+      </svg>
+      Jukebox Republic
+    </span>
+    <span class="ticker-right">
+      <button class="ticker-info" id="info-button" type="button" title="How this works" aria-label="How this works">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg>
+      </button>
+    </span>
+  </header>
 
-    <svg class="logo-mark" viewBox="0 0 100 100">
-      <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="3"/>
-      <circle cx="50" cy="50" r="37" fill="none" stroke="currentColor" stroke-width="1"/>
-      <rect x="18" y="39" width="8" height="22" rx="2" fill="currentColor"/>
-      <rect x="32" y="31" width="8" height="38" rx="2" fill="currentColor"/>
-      <rect x="46" y="23" width="8" height="54" rx="2" fill="currentColor"/>
-      <rect x="60" y="31" width="8" height="38" rx="2" fill="currentColor"/>
-      <rect x="74" y="39" width="8" height="22" rx="2" fill="currentColor"/>
-    </svg>
-    <h1 class="logo">Jukebox Republic</h1>
-    <div class="logo-rule"></div>
-    <p class="tagline">The people's queue.</p>
+  <main class="screen landing">
+    <p class="kicker">The people's queue</p>
+    <h1 class="landing-title">Everyone picks the music.</h1>
+    <p class="landing-lede">One host plays the music. Everyone else adds songs and votes on what plays next, straight from their phone.</p>
 
-    <div class="card-stack">
-      <a class="button button-primary" href="/auth/login">Start spinning</a>
-
-      <form class="card" id="join-form">
-        <label for="code">Got the code?</label>
-        <input id="code" name="code" placeholder="e.g. K7QRM" autocomplete="off" autocapitalize="characters" maxlength="8" required />
-        <button class="button button-secondary" type="submit">Join the spin</button>
-      </form>
+    <!-- Three facts that explain the app faster than a paragraph would. -->
+    <div class="landing-stats">
+      <div><b>1</b><small>host with Spotify</small></div>
+      <div><b>0</b><small>accounts for guests</small></div>
+      <div><b>½</b><small>the room to skip a song</small></div>
     </div>
 
-    <span class="app-version" id="app-version" title="Build version">v0.3.0</span>
+    <form class="join-card" id="join-form">
+      <label class="kicker" for="code">Got a room code?</label>
+      <input id="code" name="code" placeholder="K7QRM" autocomplete="off" autocapitalize="characters" maxlength="8" required />
+      <button class="button button-ink" type="submit">Join the spin</button>
+    </form>
+
+    <a class="button button-primary" href="/auth/login">Start spinning</a>
+
+    <span class="app-version" id="app-version" title="Build version">v0.4.0</span>
   </main>
 
   <div class="info-overlay" id="info-overlay">
