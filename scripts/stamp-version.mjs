@@ -6,7 +6,7 @@
 // version - this is a deliberate pre-deploy step instead of a build tool,
 // matching the project's no-bundler setup. Run it, review the diff, commit,
 // deploy: `node scripts/stamp-version.mjs`.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -35,4 +35,23 @@ for (const relPath of targets) {
 
   writeFileSync(filePath, html);
   console.log(`stamped ${relPath} -> v${version}`);
+}
+
+// The same stamp on the scripts' own imports (`from './queueApp.js'`).
+// Without it, a phone could pair a freshly loaded page with a shared
+// module it cached from the last release for up to an hour (Hosting's
+// default cache). Every import of a module gets the same stamp, so the
+// browser still loads each module once, not two copies under two URLs.
+const jsDir = path.join(rootDir, 'public', 'js');
+for (const name of readdirSync(jsDir).filter((f) => f.endsWith('.js'))) {
+  const filePath = path.join(jsDir, name);
+  const source = readFileSync(filePath, 'utf8');
+  const stamped = source.replace(
+    /(from\s+['"]\.\/[^'"?]+\.js)(\?v=[^'"]*)?(['"])/g,
+    `$1?v=${version}$3`
+  );
+  if (stamped !== source) {
+    writeFileSync(filePath, stamped);
+    console.log(`stamped public/js/${name} imports -> v${version}`);
+  }
 }

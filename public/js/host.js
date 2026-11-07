@@ -1,5 +1,5 @@
-import { startQueueApp, ackToast, escapeHtml, showToast, wireInviteButton } from './queueApp.js';
-import { fetchJson } from './api.js';
+import { startQueueApp, ackToast, escapeHtml, showToast, wireInviteButton } from './queueApp.js?v=0.4.0';
+import { fetchJson } from './api.js?v=0.4.0';
 
 /**
  * Draws the app's mark over the center of the #qr-code image once both it

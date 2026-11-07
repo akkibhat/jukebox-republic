@@ -52,7 +52,7 @@ function run(cmd, args) {
 }
 
 run('node', ['scripts/stamp-version.mjs']);
-run('git', ['add', 'package.json', 'public/index.html', 'public/host.html', 'public/guest.html']);
+run('git', ['add', 'package.json', 'public/index.html', 'public/host.html', 'public/guest.html', 'public/js']);
 run('git', ['commit', '-m', `Release v${nextVersion}`]);
 run('git', ['push']);
 run('git', ['tag', '-a', `v${nextVersion}`, '-m', `v${nextVersion}`]);
