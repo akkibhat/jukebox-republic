@@ -1,6 +1,8 @@
 node_modules
-.env
-.git
-.firebase
-.claude
 *.log
+
+# Hidden files and folders: env files, git, and local editor/tool state.
+.*
+
+# Credentials never leave this machine, not even in the build context.
+*service-account*.json
