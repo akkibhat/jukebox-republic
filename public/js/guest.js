@@ -11,6 +11,9 @@ if (codeFromUrl) {
 
 /** Asks for a session code - shown when someone lands on the guest page without one in the URL. */
 function showCodeForm() {
+  // The session panel sits below the (still empty) queue on this page, so
+  // hide everything else on Home until a code works - see .awaiting-code.
+  document.body.classList.add('awaiting-code');
   const header = document.getElementById('session-header');
   header.innerHTML = `
     <form id="code-form" class="card">
@@ -30,6 +33,7 @@ function showCodeForm() {
 function joinByCode(code) {
   fetchJson(`/api/sessions/by-code/${encodeURIComponent(code)}`)
     .then((info) => {
+      document.body.classList.remove('awaiting-code');
       // Guests get the code too, not just the host: whoever's already in
       // is usually the one reading it out to the rest of the car, and
       // they shouldn't have to borrow the host's phone to do it.

@@ -488,6 +488,16 @@ input {
   display: none;
 }
 
+/* Guest page with no working room code yet: show only the code form, not
+   the empty Now playing / Up next sections above it. */
+.awaiting-code #tab-home > :not(#session-header) {
+  display: none;
+}
+
+.awaiting-code #session-header {
+  margin-top: 8px;
+}
+
 /* The guest's copy of the join code. Deliberately quieter than the host's
    big room code - it's a reference for reading aloud, not the headline of
    the screen. */
