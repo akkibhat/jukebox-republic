@@ -191,7 +191,7 @@ async function tryStartNext(session, io) {
   // fallbackTracks); when no top-up is needed this just resolves instantly
   // and behaves exactly like awaiting resolveTargetDevice alone.
   const needsTopUp = usingFallback && session.fallbackTracks.length === 0;
-  const [, deviceId] = await Promise.all([
+  const [, { deviceId, otherDevices }] = await Promise.all([
     needsTopUp ? topUpAutopilotMix(session, accessToken) : Promise.resolve(),
     resolveTargetDevice(accessToken),
   ]);
@@ -202,11 +202,13 @@ async function tryStartNext(session, io) {
   if (!trackToPlay) return false;
 
   if (!deviceId) {
-    // Spotify can't see any device at all - nothing we can do until the
-    // host opens the Spotify app on their phone. It doesn't need to be
-    // playing anything, just open, so it registers as a Connect device.
-    // We'll retry automatically on the next poll tick.
-    session.playbackBlockedReason = "No Spotify device found. Open Spotify on the host's phone.";
+    // No active device and no phone - wait for the host rather than guess.
+    // Spotify only lists a phone while its app is open (it doesn't need to
+    // be playing anything). We'll retry automatically on the next poll tick.
+    session.playbackBlockedReason =
+      otherDevices > 0
+        ? "Open Spotify on the host's phone, or the host can pick a speaker with the device button."
+        : "No Spotify device found. Open Spotify on the host's phone.";
     await broadcastState(io, session);
     return false;
   }
@@ -339,16 +341,24 @@ async function topUpAutopilotMix(session, accessToken) {
  * Picks which Connect device to send playback to. getPlaybackState only
  * reports a device once something is already playing/paused there, which
  * is useless when starting a session from cold - so this asks Spotify for
- * every device it can currently see instead. Prefers one already marked
- * active, then a phone (the expected case: the driver's phone through
- * Android Auto), then whatever's left rather than refusing to play at all.
+ * every device it can currently see instead.
  */
 async function resolveTargetDevice(accessToken) {
-  const devices = await getAvailableDevices(accessToken);
-  if (devices.length === 0) return null;
-  const active = devices.find((d) => d.isActive);
-  const phone = devices.find((d) => d.type === 'Smartphone');
-  return (active || phone || devices[0]).id;
+  return pickDevice(await getAvailableDevices(accessToken));
+}
+
+/**
+ * The device rule, kept pure so it can be tested. A device that's already
+ * active wins, so a speaker the host chose with the device picker keeps
+ * playing across track changes. Otherwise it's the host's phone. Nothing
+ * else is picked on its own: falling back to "the first device in the
+ * list" sent a fresh session to a nearby AirPlay speaker when the phone's
+ * Spotify app was asleep. Returns the device id, plus how many other
+ * devices were seen so the blocked message can mention the picker.
+ */
+export function pickDevice(devices) {
+  const chosen = devices.find((d) => d.isActive) || devices.find((d) => d.type === 'Smartphone');
+  return { deviceId: chosen ? chosen.id : null, otherDevices: chosen ? 0 : devices.length };
 }
 
 /**
