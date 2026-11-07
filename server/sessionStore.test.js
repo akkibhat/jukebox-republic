@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectDuplicate, makeQueueItem, addToFallbackTracks } from './sessionStore.js';
+import { detectDuplicate, makeQueueItem, addToFallbackTracks, newHostToken, hostTokenMatches } from './sessionStore.js';
 
 function session({ nowPlaying = null, queue = [], playHistory = [], fallbackTracks = [] } = {}) {
   return { nowPlaying, queue, playHistory, fallbackTracks };
@@ -61,4 +61,24 @@ test('addToFallbackTracks stops adding once the pool hits its 600-track cap', ()
   const s = session({ fallbackTracks: Array.from({ length: 600 }, (_, i) => ({ uri: `spotify:track:${i}` })) });
   addToFallbackTracks(s, [{ uri: 'spotify:track:overflow' }]);
   assert.equal(s.fallbackTracks.length, 600, 'pool must not grow past the Firestore-doc-size cap');
+});
+
+test('hostTokenMatches accepts the right token and nothing else', () => {
+  const token = newHostToken();
+  assert.equal(hostTokenMatches(token, token), true);
+  assert.equal(hostTokenMatches(token, newHostToken()), false);
+  assert.equal(hostTokenMatches(token, token.slice(0, -1)), false); // different length
+  assert.equal(hostTokenMatches(token, undefined), false); // a guest claiming isHost with no token
+  assert.equal(hostTokenMatches(token, ''), false);
+});
+
+test('a session with no host token (restored from before tokens) matches nothing', () => {
+  assert.equal(hostTokenMatches(undefined, 'anything'), false);
+  assert.equal(hostTokenMatches(undefined, undefined), false);
+});
+
+test('newHostToken is long, URL-safe and different every time', () => {
+  const a = newHostToken();
+  assert.match(a, /^[A-Za-z0-9_-]{32}$/);
+  assert.notEqual(a, newHostToken());
 });

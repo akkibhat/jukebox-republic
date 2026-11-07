@@ -5,7 +5,7 @@
 // Firestore behind that same interface, so this module could be swapped
 // for a different backing store without touching a caller.
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { deletePersisted } from './persistence.js';
 import { config } from './config.js';
 
@@ -25,6 +25,24 @@ const sessions = new Map();
 /** roomCode -> sessionId, so guests can join by typing/scanning a short code. */
 const roomCodeIndex = new Map();
 
+/** A fresh, unguessable host token (192 bits, URL-safe). */
+export function newHostToken() {
+  return randomBytes(24).toString('base64url');
+}
+
+/**
+ * Does the token a phone sent match the session's host token? Constant-time
+ * comparison so response timing can't be used to guess it character by
+ * character. A session without a token (restored from before tokens existed)
+ * matches nothing until its host logs in again.
+ */
+export function hostTokenMatches(expected, provided) {
+  if (typeof expected !== 'string' || typeof provided !== 'string') return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(provided);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 /** Creates a session with a unique room code. Called once, right after the host's Spotify login. */
 export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
   const id = randomUUID();
@@ -42,6 +60,11 @@ export function createSession({ hostSpotifyId, hostDisplayName, tokens }) {
     joinUrl: `${config.publicBaseUrl}/guest.html?code=${roomCode}`,
     createdAt: Date.now(),
     host: { spotifyId: hostSpotifyId, displayName: hostDisplayName },
+    // The proof of being the host. Handed to the host's browser once, in the
+    // URL fragment of the post-login redirect (routes/auth.js), and required
+    // on 'join' to get host powers (sockets.js). Never sent to guests: every
+    // API response and broadcast picks fields explicitly.
+    hostToken: newHostToken(),
     tokens, // { accessToken, refreshToken, expiresAt } - see spotifyAuth.js
     guests: new Map(), // guestId -> { id, name, submissionCount, connected }
     queue: [], // array of queue items, see addTrackToQueue below

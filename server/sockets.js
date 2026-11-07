@@ -14,6 +14,7 @@ import {
   removeFromFallbackTracks,
   addToFallbackTracks,
   endSession,
+  hostTokenMatches,
 } from './sessionStore.js';
 import { nextRoundForGuest, applyVote } from './queueFairness.js';
 import { buildSessionRecap } from './sessionRecap.js';
@@ -80,7 +81,7 @@ function dropGuest(io, session, guest) {
 /** Wires up every real-time event a connected phone can send. Called once at startup. */
 export function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
-    socket.on('join', async ({ sessionId, guestId, name, isHost }, ack) => {
+    socket.on('join', async ({ sessionId, guestId, name, isHost, hostToken }, ack) => {
       const session = getSession(sessionId);
       if (!session) return ack?.({ error: 'This session has ended, or the code is wrong.' });
       if (session.bannedGuestIds.has(guestId)) {
@@ -94,12 +95,15 @@ export function registerSocketHandlers(io) {
       const guest = upsertGuest(session, guestId, name);
       socket.data.sessionId = sessionId;
       socket.data.guestId = guest.id;
-      // Trusted client-side flag, not real auth: the only person who ever
-      // gets a link with `isHost` in it is whoever just came back from the
-      // Spotify login redirect. For a car full of friends, that's enough -
-      // this isn't guarding against anything more adversarial than someone
-      // fibbing to skip a song, which the group can just re-add anyway.
-      socket.data.isHost = Boolean(isHost);
+      // Host powers need the session's host token, which only the host's
+      // browser has (it arrives in the post-login redirect, see
+      // routes/auth.js). Claiming isHost without it just joins as a guest,
+      // so knowing a room code no longer lets anyone end the session, kick
+      // people or take the volume.
+      socket.data.isHost = Boolean(isHost) && hostTokenMatches(session.hostToken, hostToken);
+      if (isHost && !socket.data.isHost) {
+        console.warn(`[sockets] host join for ${session.roomCode} without a valid host token - joined as a guest`);
+      }
       socket.join(roomName(sessionId));
 
       startPlaybackLoop(session, io); // no-op if it's already running

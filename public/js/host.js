@@ -87,6 +87,30 @@ function exportHistory(socket, { button, onDone } = {}) {
 
 const sessionId = new URLSearchParams(window.location.search).get('session');
 
+/**
+ * The host token arrives once, in the URL fragment after the Spotify login
+ * (#host=...). Save it per session so a reload still works, then strip it
+ * from the address bar so it isn't shared by accident with a screenshot or a
+ * copied link. Returns the saved token, or null if this browser never had one.
+ */
+function takeHostToken(id) {
+  if (!id) return null;
+  const key = `jr:hostToken:${id}`;
+  const fromHash = new URLSearchParams(window.location.hash.slice(1)).get('host');
+  try {
+    if (fromHash) localStorage.setItem(key, fromHash);
+  } catch {
+    // Private mode or blocked storage: fall back to the token in hand.
+  }
+  if (fromHash) history.replaceState(null, '', window.location.pathname + window.location.search);
+  try {
+    return localStorage.getItem(key) || fromHash;
+  } catch {
+    return fromHash;
+  }
+}
+const hostToken = takeHostToken(sessionId);
+
 if (!sessionId) {
   document.getElementById('session-header').innerHTML =
     '<p>No session found. <a href="/auth/login">Start one</a>.</p>';
@@ -118,7 +142,12 @@ if (!sessionId) {
       `;
       embedLogoInQrCode();
       wireInviteButton(document.getElementById('invite-button'), info.joinUrl, info.roomCode);
-      return startQueueApp(sessionId, { isHost: true });
+      if (!hostToken) {
+        // An old bookmark or a different browser: the server will treat this
+        // phone as a guest, so say how to get control back.
+        showToast('To control this session, log in with Spotify again on this device.');
+      }
+      return startQueueApp(sessionId, { isHost: true, hostToken });
     })
     .then((socket) => {
       document.getElementById('end-session-button').addEventListener('click', () => {

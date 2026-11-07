@@ -6,12 +6,22 @@ import { randomUUID } from 'node:crypto';
 import QRCode from 'qrcode';
 import { buildAuthorizeUrl, exchangeCodeForTokens } from '../spotifyAuth.js';
 import { getCurrentUserProfile } from '../spotifyApi.js';
-import { createSession, addToFallbackTracks, getSessionByHostId } from '../sessionStore.js';
+import { createSession, addToFallbackTracks, getSessionByHostId, newHostToken } from '../sessionStore.js';
 import { pickSeedPlaylist } from '../autopilotMix.js';
 import { getSeedPlaylistTracks } from '../seedPlaylistCache.js';
 import { schedulePersist } from '../persistence.js';
 
 export const authRouter = Router();
+
+/**
+ * Where the host lands after logging in. The host token rides in the URL
+ * fragment (#host=...), not the query string, because a fragment is never
+ * sent to any server, so it can't end up in request logs. host.js saves it
+ * and strips it from the address bar straight away.
+ */
+function hostPageUrl(session) {
+  return `/host.html?session=${session.id}#host=${encodeURIComponent(session.hostToken)}`;
+}
 
 // Short-lived store of "state" values we've handed out, so the callback can
 // confirm the redirect actually came from an authorize flow we started
@@ -48,9 +58,12 @@ authRouter.get('/callback', async (req, res) => {
     const existing = getSessionByHostId(profile.id);
     if (existing) {
       existing.tokens = tokens;
+      // Sessions restored from before host tokens existed get one now, so
+      // the host who logs back in regains control.
+      if (!existing.hostToken) existing.hostToken = newHostToken();
       schedulePersist(existing);
       console.log(`[auth] resumed existing session ${existing.roomCode} for ${profile.displayName} (tokens refreshed)`);
-      return res.redirect(`/host.html?session=${existing.id}`);
+      return res.redirect(hostPageUrl(existing));
     }
 
     const session = createSession({
@@ -88,7 +101,7 @@ authRouter.get('/callback', async (req, res) => {
       console.error('[auth] failed to seed Autopilot Mix:', err.message);
     }
 
-    res.redirect(`/host.html?session=${session.id}`);
+    res.redirect(hostPageUrl(session));
   } catch (err) {
     console.error('[auth] callback failed:', err);
     res.status(500).send('Something went wrong connecting to Spotify. Check the server logs and try again.');

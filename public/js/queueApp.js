@@ -61,7 +61,7 @@ let sessionEnded = false;
  * caller (host.js, for the "Stop spinning" button) can piggyback host-only
  * actions onto the same connection instead of opening a second one.
  */
-export function startQueueApp(sessionId, { isHost = false } = {}) {
+export function startQueueApp(sessionId, { isHost = false, hostToken = null } = {}) {
   isHostView = isHost;
   myGuestId = getOrCreateGuestId();
 
@@ -74,7 +74,9 @@ export function startQueueApp(sessionId, { isHost = false } = {}) {
         // so rejoining after a dead zone needs no special handling - the
         // same join re-registers this guest and pulls fresh state down.
         socket.on('connect', () => {
-          socket.emit('join', { sessionId, guestId: myGuestId, name, isHost }, (response) => {
+          // hostToken is what actually earns host powers on the server;
+          // isHost alone is just a request (see sockets.js 'join').
+          socket.emit('join', { sessionId, guestId: myGuestId, name, isHost, hostToken }, (response) => {
             if (response?.error) {
               // The session ended (or we were kicked) while we were away.
               renderFatalError(response.error);
