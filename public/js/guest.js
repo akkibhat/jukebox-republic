@@ -1,5 +1,5 @@
-import { startQueueApp, escapeHtml, wireInviteButton } from './queueApp.js?v=0.4.0';
-import { fetchJson } from './api.js?v=0.4.0';
+import { startQueueApp, escapeHtml, wireInviteButton } from './queueApp.js?v=0.4.1';
+import { fetchJson } from './api.js?v=0.4.1';
 
 const codeFromUrl = new URLSearchParams(window.location.search).get('code');
 
