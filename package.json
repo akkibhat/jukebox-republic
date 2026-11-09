@@ -1,6 +1,6 @@
 {
   "name": "jukebox-republic",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "The people's queue - a shared, votable Spotify queue for the car.",
   "type": "module",
   "main": "server/index.js",

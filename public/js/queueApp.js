@@ -3,7 +3,7 @@
 // code), the experience is identical except the host also gets playback
 // override buttons. Both pages call startQueueApp() once they know which
 // session to join.
-import { getOrCreateGuestId, getStoredName, setStoredName } from './identity.js?v=0.4.1';
+import { getOrCreateGuestId, getStoredName, setStoredName } from './identity.js?v=0.4.2';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
