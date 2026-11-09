@@ -632,7 +632,7 @@ function logoMarkHtml(className) {
   `;
 }
 
-/** The goodbye screen, with the election results when anything actually played. */
+/** The goodbye screen, with how the night went when anything actually played. */
 function renderSessionEnded(recap) {
   replaceBody(`
     <main class="screen screen-center">
@@ -647,7 +647,7 @@ function renderSessionEnded(recap) {
 }
 
 /**
- * The end-of-session "election results" card, built from the recap the
+ * The end-of-session "how the night went" card, built from the recap the
  * server sends with session:ended. Falls back to nothing (rather than an
  * empty card) when the session ended before anything played - the plain
  * goodbye line above carries those.
@@ -671,7 +671,7 @@ function recapHtml(recap) {
   if (recap.peoplesChampion) {
     const c = recap.peoplesChampion;
     rows.push(
-      recapRowHtml(iconHtml('crown'), "The people's champion", escapeHtml(c.name), `+${c.totalNetVotes} net votes across their picks`)
+      recapRowHtml(iconHtml('crown'), 'Crowd favourite', escapeHtml(c.name), `+${c.totalNetVotes} net votes across their picks`)
     );
   }
   if (recap.topContributor) {
@@ -683,15 +683,15 @@ function recapHtml(recap) {
   if (recap.impeached) {
     const i = recap.impeached;
     rows.push(
-      recapRowHtml(iconHtml('impeached'), 'Impeached', escapeHtml(i.name), `${i.votedOut} pick${i.votedOut === 1 ? '' : 's'} voted out by the group`)
+      recapRowHtml(iconHtml('impeached'), 'Most skipped', escapeHtml(i.name), `${i.votedOut} pick${i.votedOut === 1 ? '' : 's'} voted out by the group`)
     );
   }
 
   return `
     <div class="card recap-card">
-      <h2 class="section-title">Election results</h2>
+      <h2 class="section-title">How the night went</h2>
       ${rows.join('')}
-      <div class="recap-footer">${recap.totalPlayed} song${recap.totalPlayed === 1 ? '' : 's'} played · ${recap.guestCount} citizen${recap.guestCount === 1 ? '' : 's'}</div>
+      <div class="recap-footer">${recap.totalPlayed} song${recap.totalPlayed === 1 ? '' : 's'} played · ${recap.guestCount} ${recap.guestCount === 1 ? 'person' : 'people'}</div>
     </div>
   `;
 }
