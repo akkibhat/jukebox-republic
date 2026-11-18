@@ -1,118 +1,137 @@
 # Jukebox Republic
 
-The people's queue. One person (the driver) hosts a session through
-their Spotify account; everyone else in the car joins from their own phone,
-searches for songs, and votes on what plays next. Nobody can flood the queue
-with their own taste, and the group can vote a bad pick off the road.
+**The people's queue.** One person hosts through their Spotify account. Everyone else joins
+from their own phone, adds songs and votes on what plays next. It's built for road trips and
+house parties, anywhere one person usually ends up in charge of the music.
+
+Live at **[music.pi.co.nz](https://music.pi.co.nz)**.
+
+| Landing | Guest | Host | End of the night |
+| --- | --- | --- | --- |
+| <img src="docs/screens/landing.png" width="200" alt="Landing page with a room code box"> | <img src="docs/screens/guest-home.png" width="200" alt="Guest screen showing the song playing and the queue with votes"> | <img src="docs/screens/host-controls.png" width="200" alt="Host screen with pause, resume and skip controls above the queue"> | <img src="docs/screens/end-of-night.png" width="200" alt="End of session card with the night's awards"> |
+
+*Screens are from a sample session, with colour blocks standing in for album covers.*
 
 ## How it works
 
-- **The host** is whoever's phone is plugged into the car (Android Auto,
-  aux, whatever) and playing through their Spotify account. They log in once
-  with Spotify at the start of the session; that's the only Spotify account
-  needed for the whole car.
-- **Guests** open a link or scan a QR code shown on the host's screen, type
-  in a name, and they're in - no account, no app install, just a phone
-  browser.
-- Guests search the Spotify catalog and add songs to a shared queue.
-- Songs don't play in the order they're added. They play in **fair
-  rotation**: everyone's 1st pick plays before anyone's 2nd pick, everyone's
-  2nd before anyone's 3rd, and so on. Add five songs in a row and you've
-  still only guaranteed yourself one turn before the rest of the car gets a
-  turn too.
-- Anyone can thumbs-down a song, current or queued. Once more than half the
-  connected car agrees (majority rule - one person in a 2-person car, two of
-  three, two of four, three of five...), it's skipped/removed. It doesn't
-  vanish, though - it lands on a **Skipped songs** list, and anyone can
-  re-add it if they change their mind.
-- The host always has manual Pause/Resume/Skip controls regardless of what
-  the vote says - the group's vote is a way for everyone *else* to weigh in,
-  not a way to lock the driver out of their own stereo.
+- **The host** logs in with Spotify once. Theirs is the only Spotify account the group needs,
+  and the music plays on their device.
+- **Guests** scan a QR code or type a room code, enter a name and they're in. No account, no app.
+- **Everyone adds songs** by searching Spotify, and votes each song up or down.
+- **Half the room can skip a song.** Once half the people connected (rounded up) vote it down,
+  it's gone. It lands on a Skipped list, so anyone can bring it back.
+- **The host keeps the final say.** Pause, resume and skip work whatever the vote says.
 
-See [`server/queueFairness.js`](server/queueFairness.js) for the actual
-rotation and voting logic - it's a small, heavily-commented file and the
-real explanation of "why" lives there, not here.
+## What's in it
 
-## Why a hosted backend instead of a local hotspot
+- **Two queue modes**, switchable mid-session. *Fair rotation* plays everyone's first pick before
+  anyone's second, so nobody can flood the queue. *Majority rule* plays the most upvoted song
+  next, with waiting songs slowly gaining ground so nothing gets stuck at the bottom.
+- **Autopilot Mix** keeps the music going when the queue runs dry, from playlists the host picks.
+- **Live vote tallies** on every queued song show what's popular and how close it is to a skip.
+- **Co-hosts** can be given playback and moderation powers. The host can mark a guest as left, or
+  remove and ban them.
+- **Device picker** moves playback between the host's Spotify devices.
+- **Duplicates** are allowed but flagged, and anyone can remove a flagged one.
+- **History** can be saved as a Spotify playlist at the end of the night.
+- **How the night went:** a closing card with the golden record, crowd favourite, top contributor
+  and most skipped.
 
-Earlier attempts at this (see the git history / old repos, since deleted -
-they ran a Raspberry Pi as a Mopidy server and had guests join its WiFi
-hotspot) fought the car itself: phones can't reliably hotspot, stay
-connected to Android Auto, and hold a data connection all at the same time.
-This version instead has the host and every guest talk to a small server
-over their own cellular data - nobody needs to be on the same network, and
-it doesn't care whether the host's phone is also busy mirroring to the
-dash.
+## Built for bad signal
 
-## Setup
+The first version of this was for a car on roads with long dead zones, and that shaped the design:
 
-1. Create a Spotify app at the
-   [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
-   You (as the host) need a **Spotify Premium** account - playback control
-   through the Web API doesn't work on Free.
-2. In the app's settings, add a Redirect URI. For local testing that's
-   `http://127.0.0.1:8080/auth/callback`; for a real deployment use your
-   actual domain.
-3. Copy `.env.example` to `.env` and fill in the client ID/secret from the
-   dashboard, plus `PUBLIC_BASE_URL` (the URL guests will actually load -
-   your deployed URL, or `http://127.0.0.1:8080` for local testing on one
-   machine).
-4. Install and run:
+- Everyone talks to a small server over their own mobile data, so nobody has to share a network.
+  (Earlier attempts ran a Raspberry Pi hotspot in the car, and phones can't reliably hold a
+  hotspot, Android Auto and a data connection all at once.)
+- Phones reconnect by themselves after a dropout and carry on where they left off.
+- A guest who loses signal or locks their phone still counts as present for 30 minutes, so the
+  skip threshold doesn't jump around mid-song.
+- Sessions are saved to Firestore, so a server restart or redeploy doesn't end anyone's night.
+- If the host starts something by hand in Spotify, the app follows along and picks the queue back
+  up when that song ends.
+
+## Built with
+
+Node.js 22, Express and Socket.IO on Cloud Run · Firestore for session persistence · Firebase
+Hosting for the pages · the Spotify Web API. The front end is plain HTML, CSS and JavaScript
+modules, with no build step.
+
+## Running it locally
+
+1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and
+   add `http://127.0.0.1:8080/auth/callback` as a Redirect URI. The host needs **Spotify Premium**,
+   because playback control doesn't work on Free.
+2. Copy `.env.example` to `.env` and fill in the client ID and secret.
+3. Install and run:
 
    ```
    npm install
-   npm start
+   npm run dev
    ```
 
-5. The host opens `PUBLIC_BASE_URL` and taps "Start spinning," which sends
-   them through Spotify login. Guests open the same URL and enter the session
-   code shown on the host's screen (or scan the QR code).
+4. Open `http://127.0.0.1:8080` and press **Start spinning**.
 
-For guests on other phones to actually reach it, the server needs to be
-reachable from the open internet (deploy it somewhere, or use a tunnel like
-`ngrok` while testing) - `127.0.0.1` only works if everyone's testing on the
-same machine.
+Firestore is optional. Without `GOOGLE_APPLICATION_CREDENTIALS` or `FIRESTORE_PROJECT_ID` set,
+sessions just live in memory. If you do point it at a real project, local sessions are saved
+there too, so end them before deploying.
+
+Run the tests with `npm test`.
+
+## Releasing
+
+```
+node scripts/release.mjs patch
+```
+
+This bumps the version, stamps it into the pages and script imports so phones don't hold on to
+old files, commits, pushes, tags and writes the GitHub release notes. Then deploy whichever side
+changed:
+
+```
+gcloud run deploy jukebox-republic-server --source . --region australia-southeast1 --project jukebox-republic
+firebase deploy --only hosting --project jukebox-republic
+```
 
 ## Project layout
 
 ```
 server/
-  index.js          Express + Socket.io entry point
-  config.js         Environment variable loading
-  spotifyAuth.js    OAuth login/token refresh for the host
-  spotifyApi.js     Search + playback control calls to the Spotify Web API
-  sessionStore.js   In-memory session/guest/queue state
-  queueFairness.js  The rotation + voting algorithm (read this one)
-  playbackEngine.js Watches playback progress and advances the queue
-  sockets.js        Real-time join/add/vote handling
-  routes/           HTTP routes (Spotify login, session info, search)
+  index.js              Express + Socket.IO entry point
+  sockets.js            Real-time join, add, vote and host actions
+  broadcast.js          Sends each phone its view of the session
+  playbackEngine.js     Watches Spotify and moves the queue along
+  queueFairness.js      The rotation and voting rules (start here)
+  sessionStore.js       Session, guest and queue state
+  persistence.js        Saves sessions to Firestore and restores them on boot
+  autopilotMix.js       Fills the fallback mix from playlists
+  sessionRecap.js       Works out the end-of-night awards
+  goldenRecord.js       Finds the night's most upvoted song
+  spotifyAuth.js        Host login and token refresh
+  spotifyApi.js         Search and playback calls to Spotify
+  routes/               HTTP routes for login, session info and search
 public/
-  index.html        Landing page (start a session / join a session)
-  host.html          Host's screen: session code, QR, queue
-  guest.html         Guest's screen: same queue view, joined by code
-  js/                Browser-side logic shared between host and guest pages
+  index.html            Landing page
+  host.html, guest.html The session screens
+  js/queueApp.js        The shared queue UI
+scripts/                Release and version stamping
 ```
 
-## Known limitations
+## Limits
 
-- State is in-memory only - restarting the server ends every active session.
-  Fine for a single-instance deployment; would need a shared store (Redis
-  or similar) to run more than one server instance.
-- The playback engine polls Spotify every few seconds rather than reacting
-  to a push event, since the Web API doesn't offer one for track-end. This
-  means auto-advance has a couple seconds of slack, which is intentional -
-  see `END_OF_TRACK_LEAD_MS` in `playbackEngine.js`.
-- No persistence of past sessions, favorite songs, or stats. Could be worth
-  adding later if there's demand for "what did we listen to last time."
+- **Spotify Development Mode** caps the app at 5 approved Spotify accounts, so hosting is
+  invite-only. Guests aren't affected, because they never sign in to Spotify.
+- **One server instance.** Live session state is held in memory, with Firestore as the backup, so
+  the app is designed to run as a single instance.
+- **Polling.** Spotify doesn't announce when a track ends, so the server checks every few seconds
+  and starts the next song just before the current one finishes.
 
 ## License
 
 Copyright 2026 Akki Bhat. Released under the
-[PolyForm Noncommercial License 1.0.0](LICENSE): you're free to run,
-modify, and share it for personal, hobby, academic, or other
-noncommercial purposes.
+[PolyForm Noncommercial License 1.0.0](LICENSE): you're free to run, modify and share it for
+personal, hobby, academic or other noncommercial purposes.
 
-**Any commercial use needs a separate license** - email license@pi.co.nz.
-Note that Spotify's own Developer Terms independently restrict
-commercializing anything built on their API, so a commercial deployment
-would need their agreement as well as this one.
+**Any commercial use needs a separate license.** Email license@pi.co.nz. Spotify's Developer Terms
+also restrict commercial use of anything built on their API, so a commercial deployment would need
+their agreement too.
